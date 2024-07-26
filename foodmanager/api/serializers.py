@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Food, Meal, Feedback
+from .models import User, Food, Meal, Comment
 
 class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -25,12 +25,12 @@ class MealSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Meal
-        fields = ['id', 'date', 'food']
+        fields = ['id', 'date', 'food','rating']
 
-class FeedbackSerializer(serializers.ModelSerializer):
+class CommentSerializer(serializers.ModelSerializer):
     user = UserSerializer()
     meal = MealSerializer()
 
     class Meta:
-        model = Feedback
-        fields = ['id', 'user', 'meal', 'text', 'rating']
+        model = Comment
+        fields = ['id', 'user', 'meal', 'text',]

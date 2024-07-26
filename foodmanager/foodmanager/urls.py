@@ -11,7 +11,7 @@ router = DefaultRouter()
 router.register(r'users', views.UserViewSet)
 router.register(r'foods', views.FoodViewSet)
 router.register(r'meals', views.MealViewSet)
-router.register(r'feedbacks', views.FeedbackViewSet)
+router.register(r'comments', views.CommentViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

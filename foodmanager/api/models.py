@@ -54,7 +54,7 @@ class User(AbstractBaseUser):
 
 class Food(models.Model):
     name = models.CharField(max_length=255)
-    picture = models.ImageField(upload_to='food_pictures/')
+    picture = models.ImageField(upload_to='food_pictures/',null=True, blank=True)
     description = models.TextField()
 
     def __str__(self):
@@ -63,15 +63,16 @@ class Food(models.Model):
 class Meal(models.Model):
     date = jmodels.jDateField()
     food = models.ForeignKey(Food, on_delete=models.CASCADE)
+    rating = models.IntegerField(default=0)    
 
     def __str__(self):
         return f"{self.date} - {self.food.name}"
 
-class Feedback(models.Model):
+class Comment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     meal = models.ForeignKey(Meal, on_delete=models.CASCADE)
     text = models.TextField()
-    rating = models.IntegerField()
+    
 
     def __str__(self):
-        return f"{self.user.phone_number} - {self.meal.date} - {self.rating}"
+        return f"{self.user.phone_number} - {self.meal.date}"
