@@ -7,6 +7,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from django.utils import timezone
+from datetime import timedelta
+from persiantools.jdatetime import JalaliDate
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -39,6 +42,23 @@ class MealViewSet(viewsets.ModelViewSet):
     serializer_class = MealSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+    @action(detail=False, methods=['get'], url_path='filter/(?P<filter>[^/.]+)')
+    def filter_meals(self, request, filter=None):
+        now = timezone.now().date()
+        if filter == 'upcoming':
+            meals = Meal.objects.filter(date__gt=now)
+        elif filter == 'past':
+            meals = Meal.objects.filter(date__lt=now)
+        elif filter == 'current_week':
+            start_of_week = now - timedelta(days=now.weekday())
+            end_of_week = start_of_week + timedelta(days=6)
+            meals = Meal.objects.filter(date__range=[start_of_week, end_of_week])
+        else:
+            meals = Meal.objects.all()
+        
+        serializer = MealSerializer(meals, many=True, context={'request': request})
+        return Response(serializer.data)
+    
     @action(detail=False, methods=['get'], url_path='date/(?P<date>[^/.]+)')
     def get_meal_by_date(self, request, date=None):
         try:
@@ -53,6 +73,26 @@ class MealViewSet(viewsets.ModelViewSet):
         meal = self.get_object()
         comments = meal.comment_set.all()
         serializer = CommentSerializer(comments, many=True,context={'request': request})
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='current-month')
+    def get_meals_for_current_month(self, request):
+        month_str = request.query_params.get('month', None)
+        if month_str is None:
+            return Response({'error': 'Month parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            year, month = map(int, month_str.split('-'))
+            start_of_month = JalaliDate(year, month, 1).to_gregorian()
+            print(month)
+            print(year)
+            end_of_month_day = JalaliDate.days_in_month(month=month, year=year)
+            end_of_month = JalaliDate(year, month, end_of_month_day).to_gregorian()
+        except ValueError:
+            return Response({'error': 'Invalid month parameter format. Use jYYYY-jMM'}, status=status.HTTP_400_BAD_REQUEST)
+
+        meals = Meal.objects.filter(date__range=[start_of_month, end_of_month])
+        serializer = self.get_serializer(meals, many=True, context={'request': request})
         return Response(serializer.data)
 
 class CommentViewSet(viewsets.ModelViewSet):

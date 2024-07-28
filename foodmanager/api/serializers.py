@@ -22,6 +22,7 @@ class FoodSerializer(serializers.ModelSerializer):
 
 class MealSerializer(serializers.ModelSerializer):
     food = FoodSerializer()
+    date = serializers.DateField(format='%Y-%m-%d')  # Ensure standard date format
 
     class Meta:
         model = Meal
