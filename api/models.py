@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from django_autoutils.model_utils import AbstractModel
 from phonenumber_field.modelfields import PhoneNumberField
 
+from util.db_names import D
 from util.field_names import S
 
 
@@ -50,6 +51,17 @@ class User(AbstractUser):
     def is_admin(self):
         return self.role == User.UserRoleChoices.ADMIN
 
+    class Meta:
+        db_table = D.USER
+        verbose_name = _("user")
+        verbose_name_plural = _("users")
+        constraints = [
+            models.UniqueConstraint(models.UniqueConstraint(fields=[S.PHONE_NUMBER], condition=models.Q(is_active=True),
+                                                            name=f"{S.UNIQUE}_{S.USER}1",
+                                                            violation_error_message=_(
+                                                                "user with this phone number was exists")))
+        ]
+
 
 class Food(AbstractModel):
     name = models.CharField(_("name"), max_length=255)
@@ -60,6 +72,11 @@ class Food(AbstractModel):
     def __str__(self):
         return self.name
 
+    class Meta:
+        db_table = D.FOOD
+        verbose_name = _("food")
+        verbose_name_plural = _("foods")
+
 
 class Meal(AbstractModel):
     date = models.DateField(_("date"))
@@ -68,6 +85,11 @@ class Meal(AbstractModel):
 
     def __str__(self):
         return f"{self.date} {self.food}"
+
+    class Meta:
+        db_table = D.MEAL
+        verbose_name = _("meal")
+        verbose_name_plural = _("meals")
 
 
 class Comment(AbstractModel):
@@ -78,6 +100,11 @@ class Comment(AbstractModel):
     def __str__(self):
         return f"{self.user} {self.meal}"
 
+    class Meta:
+        db_table = D.COMMENT
+        verbose_name = _("comment")
+        verbose_name_plural = _("comments")
+
 
 class Rate(AbstractModel):
     user = models.ForeignKey(User, on_delete=models.SET_NULL)
@@ -86,3 +113,8 @@ class Rate(AbstractModel):
 
     def __str__(self):
         return f"{self.meal} {self.rate}"
+
+    class Meta:
+        db_table = D.RATE
+        verbose_name = _("rate")
+        verbose_name_plural = _("rates")
