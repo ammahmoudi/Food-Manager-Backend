@@ -14,3 +14,4 @@ class S(D):
     DATE = "date"
     FOOD = "food"
     RATE = "rate"
+    UNIQUE = "unique"
