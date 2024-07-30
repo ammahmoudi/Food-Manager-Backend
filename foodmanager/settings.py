@@ -15,7 +15,6 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -28,9 +27,8 @@ DEBUG = True
 CSRF_COOKIE_SECURE = True
 # Additional configuration
 ALLOWED_HOSTS = ['localhost']
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8000','http://localhost:3000']
-CORS_ORIGIN_WHITELIST = ['http://localhost:8000','http://localhost:3000']
-
+CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://localhost:3000']
+CORS_ORIGIN_WHITELIST = ['http://localhost:8000', 'http://localhost:3000']
 
 # Application definition
 
@@ -42,13 +40,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-        'corsheaders',
+    'corsheaders',
 
     # Other apps
     'rest_framework',
     'rest_framework.authtoken',
     'djoser',
     'drf_spectacular',
+    'phonenumber_field',
+
     'api',
 ]
 
@@ -71,14 +71,14 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,}
+    'SIGNING_KEY': SECRET_KEY, }
 DJOSER = {
     'LOGIN_FIELD': 'phone_number',
     'USER_CREATE_PASSWORD_RETYPE': True,
     'SERIALIZERS': {
         'user_create': 'api.serializers.UserCreateSerializer',
         'user': 'api.serializers.UserSerializer',
-        'current_user':'api.serializers.UserSerializer',
+        'current_user': 'api.serializers.UserSerializer',
     },
 }
 SPECTACULAR_SETTINGS = {
@@ -88,9 +88,8 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
 }
 
-
 MIDDLEWARE = [
-'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -121,7 +120,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'foodmanager.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
@@ -131,7 +129,6 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -151,7 +148,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -162,7 +158,6 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
