@@ -75,17 +75,14 @@ class MealViewSet(viewsets.ModelViewSet):
         serializer = CommentSerializer(comments, many=True,context={'request': request})
         return Response(serializer.data)
     
-    @action(detail=False, methods=['get'], url_path='current-month')
-    def get_meals_for_current_month(self, request):
-        month_str = request.query_params.get('month', None)
-        if month_str is None:
+    @action(detail=False, methods=['get'], url_path='current-month/(?P<month>[^/.]+)')
+    def get_meals_for_current_month(self, request,month=None):
+        # month_str = request.query_params.get('month', None)
+        if month is None:
             return Response({'error': 'Month parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            year, month = map(int, month_str.split('-'))
+            year, month = map(int, month.split('-'))
             start_of_month = JalaliDate(year, month, 1).to_gregorian()
-            print(month)
-            print(year)
             end_of_month_day = JalaliDate.days_in_month(month=month, year=year)
             end_of_month = JalaliDate(year, month, end_of_month_day).to_gregorian()
         except ValueError:
