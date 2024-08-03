@@ -1,7 +1,8 @@
-from util.db_names import D
+from utils.strings.db_names import D
 
 
 class S(D):
+    ID = "id"
     FIRST_NAME = "first_name"
     LAST_NAME = "last_name"
     PHONE_NUMBER = "phone_number"
