@@ -32,7 +32,8 @@ class User(AbstractUser):
         ADMIN = 2, _('admin')
 
     phone_number = PhoneNumberField(_("phone number"), db_index=True, unique=True)
-    user_image = models.ImageField(_("user image"), upload_to='user_images/', null=True, blank=True)
+    user_image = models.ImageField(_("user image"), upload_to='user_images/', blank=True,
+                                   default="user_images/default avatar.jpg")
     role = models.CharField(_("user role"), max_length=6, choices=UserRoleChoices.choices,
                             default=UserRoleChoices.USER)
 
