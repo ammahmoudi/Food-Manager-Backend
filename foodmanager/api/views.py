@@ -1,6 +1,6 @@
 from rest_framework import viewsets, permissions
 from .models import User, Food, Meal, Comment
-from .serializers import UserSerializer, FoodSerializer, MealSerializer, CommentSerializer
+from .serializers import CreateMealSerializer, UserSerializer, FoodSerializer, MealSerializer, CommentSerializer
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -42,6 +42,18 @@ class MealViewSet(viewsets.ModelViewSet):
     serializer_class = MealSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateMealSerializer
+        return MealSerializer
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers) 
+    
     @action(detail=False, methods=['get'], url_path='filter/(?P<filter>[^/.]+)')
     def filter_meals(self, request, filter=None):
         now = timezone.now().date()
