@@ -28,6 +28,9 @@ class FoodSerializer(serializers.ModelSerializer):
                 # If picture is empty string, remove the existing image file
                 instance.picture.delete(save=False)
                 instance.picture = None
+        else :
+            instance.picture.delete(save=False)
+            instance.picture = None
 
         return super().update(instance, validated_data)
 
