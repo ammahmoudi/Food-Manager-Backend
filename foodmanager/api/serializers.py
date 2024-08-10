@@ -19,7 +19,6 @@ class FoodSerializer(serializers.ModelSerializer):
     class Meta:
         model = Food
         fields = ['id', 'name', 'picture', 'description']
-        
     def update(self, instance, validated_data):
         # Check if the picture field is in the validated data and is empty
         if 'picture' in validated_data:
@@ -27,10 +26,13 @@ class FoodSerializer(serializers.ModelSerializer):
             if picture == '' and instance.picture:
                 # If picture is empty string, remove the existing image file
                 instance.picture.delete(save=False)
-                instance.picture = None
+                # instance.picture.save('food_pictures/default.jpeg', None)
+                instance.picture=None
         else :
             instance.picture.delete(save=False)
-            instance.picture = None
+            # instance.picture.save('food_pictures/default.jpeg', None)
+            instance.picture=None
+
 
         return super().update(instance, validated_data)
 

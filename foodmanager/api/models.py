@@ -64,7 +64,7 @@ class Meal(models.Model):
     # date = jmodels.jDateField()
     date=models.DateField()
     food = models.ForeignKey(Food, on_delete=models.CASCADE)
-    rating = models.IntegerField(default=0)    
+    rating = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.date} - {self.food.name}"

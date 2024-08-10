@@ -45,6 +45,9 @@ class MealViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return CreateMealSerializer
+        if self.action == 'update':
+            return CreateMealSerializer
+        
         return MealSerializer
     
     def create(self, request, *args, **kwargs):
@@ -53,6 +56,12 @@ class MealViewSet(viewsets.ModelViewSet):
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers) 
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['get'], url_path='filter/(?P<filter>[^/.]+)')
     def filter_meals(self, request, filter=None):
