@@ -62,7 +62,7 @@ class MealViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Meal not found'}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=['get'])
-    def comments(self, request, pk=None):
+    def comments(self, request):
         meal = self.get_object()
         comments = meal.comment_set.all()
         serializer = CommentSerializer(comments, many=True, context={'request': request})
