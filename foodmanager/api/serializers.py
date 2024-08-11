@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from .models import User, Food, Meal, Comment
+from django.db.models import Avg
+
 
 class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,10 +17,15 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'name', 'phone_number', 'user_image', 'role')
+
 class FoodSerializer(serializers.ModelSerializer):
+    rating = serializers.SerializerMethodField()
+    meal_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Food
-        fields = ['id', 'name', 'picture', 'description']
+        fields = ['id', 'name', 'description', 'picture', 'rating', 'meal_count']
+
     def update(self, instance, validated_data):
         # Check if the picture field is in the validated data and is empty
         if 'picture' in validated_data:
@@ -26,16 +33,25 @@ class FoodSerializer(serializers.ModelSerializer):
             if picture == '' and instance.picture:
                 # If picture is empty string, remove the existing image file
                 instance.picture.delete(save=False)
-                # instance.picture.save('food_pictures/default.jpeg', None)
-                instance.picture=None
-        else :
+                instance.picture = None
+        else:
             instance.picture.delete(save=False)
-            # instance.picture.save('food_pictures/default.jpeg', None)
-            instance.picture=None
-
+            instance.picture = None
 
         return super().update(instance, validated_data)
 
+    def get_rating(self, obj):
+        # Get all meals related to this food
+        meals = Meal.objects.filter(food=obj)
+        if meals.exists():
+            # Calculate average rating
+            average_rating = meals.aggregate(average=Avg('rating'))['average']
+            return round(average_rating, 1) if average_rating else 0
+        return 0
+
+    def get_meal_count(self, obj):
+        # Count all meals related to this food
+        return Meal.objects.filter(food=obj).count()
 class MealSerializer(serializers.ModelSerializer):
     food = FoodSerializer()
     date = serializers.DateField(format='%Y-%m-%d')  # Ensure standard date format
