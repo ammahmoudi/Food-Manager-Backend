@@ -74,9 +74,14 @@ class CreateMealSerializer(serializers.ModelSerializer):
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
-    meal = MealSerializer()
+    userId = serializers.IntegerField(source='user.id', read_only=True)
+    userName = serializers.CharField(source='user.name', read_only=True)
+    userPicture = serializers.ImageField(source='user.user_image', read_only=True)
+    mealName = serializers.CharField(source='meal.food.name', read_only=True)
+    mealDate = serializers.DateField(source='meal.date', read_only=True)
+    mealPicture = serializers.ImageField(source='meal.food.picture', read_only=True)
 
     class Meta:
         model = Comment
-        fields = ['id', 'user', 'meal', 'text',]
+        fields = ['id', 'userId', 'userName', 'userPicture', 'text', 'mealName', 'mealDate', 'mealPicture']
+

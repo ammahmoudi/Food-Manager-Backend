@@ -118,6 +118,12 @@ class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    def latest(self, request):
+        latest_comments = Comment.objects.order_by('text')[:10]  # Fetch the latest 10 comments
+        serializer = self.get_serializer(latest_comments, many=True)
+        return Response(serializer.data)
+
 class AdminCheckView(APIView):
     permission_classes = [IsAuthenticated]
 
