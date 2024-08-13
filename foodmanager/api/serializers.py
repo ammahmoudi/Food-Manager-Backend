@@ -27,16 +27,19 @@ class FoodSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'picture', 'rating', 'meal_count']
 
     def update(self, instance, validated_data):
-        # Check if the picture field is in the validated data and is empty
-        if 'picture' in validated_data:
-            picture = validated_data.get('picture')
-            if picture == '' and instance.picture:
-                # If picture is empty string, remove the existing image file
-                instance.picture.delete(save=False)
+        # Handle picture removal
+        if 'remove_picture' in self.context['request'].data:
+            if self.context['request'].data['remove_picture'] == 'true':
+                instance.picture.delete(save=False)  # Remove the existing picture
                 instance.picture = None
-        else:
-            instance.picture.delete(save=False)
-            instance.picture = None
+
+        # Handle picture update
+        picture = validated_data.get('picture', None)
+
+        if picture is None and 'picture' in validated_data:
+            # If picture is None, the client might be trying to keep the existing picture,
+            # so we should not remove the current picture unless explicitly requested
+            validated_data.pop('picture', None)
 
         return super().update(instance, validated_data)
 
