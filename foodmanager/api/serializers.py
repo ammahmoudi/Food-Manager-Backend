@@ -14,9 +14,21 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return user
 
 class UserSerializer(serializers.ModelSerializer):
+    remove_image = serializers.BooleanField(write_only=True, required=False)
+
     class Meta:
         model = User
-        fields = ('id', 'name', 'phone_number', 'user_image', 'role')
+        fields = ('id', 'name', 'phone_number', 'user_image', 'role', 'remove_image')
+
+    def update(self, instance, validated_data):
+        # Handle image removal
+        if validated_data.get('remove_image'):
+            instance.user_image.delete(save=False)
+            validated_data.pop('remove_image')
+
+        # Update the rest of the fields
+        return super().update(instance, validated_data)
+
 
 class FoodSerializer(serializers.ModelSerializer):
     rating = serializers.SerializerMethodField()
