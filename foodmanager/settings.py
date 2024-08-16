@@ -49,10 +49,11 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'phonenumber_field',
 
-    'api',
+    'user',
+    'meal'
 ]
 
-AUTH_USER_MODEL = 'api.User'
+AUTH_USER_MODEL = 'user.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -76,9 +77,9 @@ DJOSER = {
     'LOGIN_FIELD': 'phone_number',
     'USER_CREATE_PASSWORD_RETYPE': True,
     'SERIALIZERS': {
-        'user_create': 'api.serializers.UserCreateSerializer',
-        'user': 'api.serializers.UserSerializer',
-        'current_user': 'api.serializers.UserSerializer',
+        'user_create': 'user.serializers.UserCreateSerializer',
+        'user': 'user.serializers.UserSerializer',
+        'current_user': 'user.serializers.UserSerializer',
     },
 }
 SPECTACULAR_SETTINGS = {
