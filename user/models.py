@@ -11,7 +11,6 @@ from utils.strings.field_names import S
 from django.contrib.auth.models import AbstractBaseUser
 
 
-
 class CustomUserManager(BaseUserManager):
     def create_user(self, phone_number, full_name=None, password=None, **extra_fields):
         if not phone_number:
@@ -23,11 +22,15 @@ class CustomUserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, phone_number, full_name=None, password=None, **extra_fields):
-        extra_fields.setdefault('is_admin', True)
-        extra_fields.setdefault('role', 'admin')
+    def create_superuser(
+        self, phone_number, full_name=None, password=None, **extra_fields
+    ):
+        extra_fields.setdefault("is_admin", True)
+        extra_fields.setdefault("role", "admin")
 
-        return self.create_user(phone_number, full_name=full_name, password=password, **extra_fields)
+        return self.create_user(
+            phone_number, full_name=full_name, password=password, **extra_fields
+        )
 
 
 class User(AbstractBaseUser):
@@ -55,7 +58,6 @@ class User(AbstractBaseUser):
     is_active = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)
 
-
     objects = CustomUserManager()
 
     USERNAME_FIELD = S.PHONE_NUMBER
@@ -73,7 +75,7 @@ class User(AbstractBaseUser):
     # @cached_property
     # def is_admin(self):
     #     return self.role == 'admin'
-    
+
     @property
     def is_staff(self):
         return self.is_admin
