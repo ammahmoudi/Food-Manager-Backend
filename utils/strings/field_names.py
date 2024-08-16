@@ -3,8 +3,7 @@ from utils.strings.db_names import D
 
 class S(D):
     ID = "id"
-    FIRST_NAME = "first_name"
-    LAST_NAME = "last_name"
+    FULL_NAME = "full_name"
     PHONE_NUMBER = "phone_number"
     USER_IMAGE = "user_image"
     ROLE = "role"

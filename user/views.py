@@ -12,15 +12,27 @@ from rest_framework import status
 class AdminCheckView(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=["get"], url_path="admin_check")
+    @action(detail=False, methods=["get"], url_path="")
     def get(self, request):
         user = request.user
         if user.is_admin:
-            return Response({'is_admin': True}, status=status.HTTP_200_OK)
-        return Response({'is_admin': False}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"is_admin": True}, status=status.HTTP_200_OK)
+        return Response({"is_admin": False}, status=status.HTTP_403_FORBIDDEN)
 
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    @action(detail=False, methods=["get"], url_path="check-phone-number")
+    def check_phone_number(self, request):
+        phone_number = request.query_params.get("phone_number")
+        if not phone_number:
+            return Response(
+                {"detail": "Phone number is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        is_unique = not User.objects.filter(phone_number=phone_number).exists()
+        return Response({"is_unique": is_unique}, status=status.HTTP_200_OK)
