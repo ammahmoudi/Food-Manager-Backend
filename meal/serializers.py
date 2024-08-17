@@ -1,59 +1,71 @@
 from rest_framework import serializers
-
 from user.serializers import UserSerializer
-from .models import Food, Meal, Comment
+from .models import Food, Meal, Comment, Rate
+from django.db.models import Avg
 
 
 class FoodSerializer(serializers.ModelSerializer):
     meal_count = serializers.SerializerMethodField()
+    avg_rate = (
+        serializers.SerializerMethodField()
+    )  # Add avg_rate as a SerializerMethodField
 
     class Meta:
         model = Food
-        fields = ["id", "name", "image", "description", "rate", "meal_count"]
+        fields = [
+            "id",
+            "name",
+            "image",
+            "description",
+            "avg_rate",
+            "meal_count",
+        ]
 
-    def update(self, instance, validated_data):
-        # Handle picture removal
-        if "remove_image" in self.context["request"].data:
-            if self.context["request"].data["remove_image"] == "true":
-                instance.picture.delete(save=False)  # Remove the existing picture
-                instance.picture = None
-
-        # Handle picture update
-        picture = validated_data.get("image", None)
-
-        if picture is None and "image" in validated_data:
-            # If picture is None, the client might be trying to keep the existing picture,
-            # so we should not remove the current picture unless explicitly requested
-            validated_data.pop("image", None)
-
-        return super().update(instance, validated_data)
     def get_meal_count(self, obj):
-        # Count all meals related to this food
         return Meal.objects.filter(food=obj).count()
+
+    def get_avg_rate(self, obj):
+        # Calculate the average rate of all meals associated with this food
+        avg_rate = Meal.objects.filter(food=obj).aggregate(Avg("avg_rate"))[
+            "avg_rate__avg"
+        ]
+        return round(avg_rate, 2) if avg_rate is not None else 0
+
 
 class MealSerializer(serializers.ModelSerializer):
     food = FoodSerializer()
-    date = serializers.DateField(format="%Y-%m-%d")  # Ensure standard date format
+    date = serializers.DateField(format="%Y-%m-%d")
+    avg_rate = (
+        serializers.SerializerMethodField()
+    )  # Add avg_rate as a SerializerMethodField
 
     class Meta:
         model = Meal
         fields = ["id", "date", "food", "avg_rate"]
+
+    def get_avg_rate(self, obj):
+        # Calculate the average rate of all rates associated with this meal
+        avg_rate = Rate.objects.filter(meal=obj).aggregate(Avg("rate"))["rate__avg"]
+        return round(avg_rate, 2) if avg_rate is not None else 0
+
+
 class CreateMealSerializer(serializers.ModelSerializer):
     food_id = serializers.IntegerField()
     date = serializers.DateField()
 
     class Meta:
         model = Meal
-        fields = ['food_id', 'date']
+        fields = ["food_id", "date"]
 
     def create(self, validated_data):
-        food_id = validated_data.pop('food_id')
+        food_id = validated_data.pop("food_id")
         food = Food.objects.get(id=food_id)
         meal = Meal.objects.create(food=food, **validated_data)
         return meal
 
+
 class CommentSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
+    user = UserSerializer(read_only=True)
     meal = MealSerializer()
 
     class Meta:
@@ -63,4 +75,30 @@ class CommentSerializer(serializers.ModelSerializer):
             "user",
             "meal",
             "text",
+            "created_at",
+            "updated_at"
         ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def create(self, validated_data):
+        request = self.context.get('request', None)
+        if request and hasattr(request, 'user'):
+            validated_data['user'] = request.user
+        return super().create(validated_data)
+
+
+class RateSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Rate
+        fields = ["id", "user", "meal", "rate", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        # Ensure a user can only rate a meal once
+        rate, created = Rate.objects.update_or_create(
+            user=self.context["request"].user,
+            meal=validated_data.get("meal"),
+            defaults={"rate": validated_data.get("rate")},
+        )
+        return rate

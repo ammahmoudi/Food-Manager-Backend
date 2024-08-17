@@ -1,3 +1,4 @@
+from django.utils.timezone import now
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django_autoutils.model_utils import AbstractModel
@@ -10,7 +11,7 @@ class Food(AbstractModel):
     name = models.CharField(_("name"), max_length=255)
     image = models.ImageField(_("image"), upload_to='food_images/', null=True, blank=True)
     description = models.TextField(_("description"), null=True, blank=True)
-    rate = models.FloatField(_("rate"), default=0)
+    avg_rate = models.FloatField(_("rate"), default=0)
 
     def __str__(self):
         return self.name
@@ -39,6 +40,8 @@ class Comment(AbstractModel):
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     meal = models.ForeignKey(Meal, on_delete=models.CASCADE)
     text = models.TextField(_("text"))
+    created_at = models.DateTimeField(default=now)  # Auto set on creation
+    updated_at = models.DateTimeField(auto_now=True)  # Auto update on save
 
     def __str__(self):
         return f"{self.user} {self.meal}"
@@ -53,7 +56,8 @@ class Rate(AbstractModel):
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     meal = models.ForeignKey(Meal, on_delete=models.SET_NULL, null=True)
     rate = models.IntegerField(_("rate"), default=5)
-
+    created_at = models.DateTimeField(default=now)  # Auto set on creation
+    updated_at = models.DateTimeField(auto_now=True)  # Auto update on save
     def __str__(self):
         return f"{self.meal} {self.rate}"
 

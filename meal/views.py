@@ -1,6 +1,13 @@
 from rest_framework import viewsets, permissions
-from meal.models import Food, Meal, Comment
-from meal.serializers import CreateMealSerializer, FoodSerializer, MealSerializer, CommentSerializer
+from meal import models
+from meal.models import Food, Meal, Comment, Rate
+from meal.serializers import (
+    CreateMealSerializer,
+    FoodSerializer,
+    MealSerializer,
+    CommentSerializer,
+    RateSerializer,
+)
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
@@ -36,21 +43,24 @@ class MealViewSet(viewsets.ModelViewSet):
     queryset = Meal.objects.all()
     serializer_class = MealSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-    
+
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action == "create":
             return CreateMealSerializer
-        if self.action == 'update':
+        if self.action == "update":
             return CreateMealSerializer
-        
+
         return MealSerializer
-    
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers) 
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data)
@@ -58,7 +68,7 @@ class MealViewSet(viewsets.ModelViewSet):
         self.perform_update(serializer)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'], url_path='filter/(?P<filter>[^/.]+)')
+    @action(detail=False, methods=["get"], url_path="filter/(?P<filter>[^/.]+)")
     def filter_meals(self, request, filter=None):
         now = timezone.now().date()
         if filter == "upcoming":
@@ -85,19 +95,8 @@ class MealViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Meal not found"}, status=status.HTTP_404_NOT_FOUND
             )
-
-    @action(detail=True, methods=["get"])
-    def comments(self, request):
-        meal = self.get_object()
-        comments = meal.comment_set.all()
-        serializer = CommentSerializer(
-            comments, many=True, context={"request": request}
-        )
-        return Response(serializer.data)
-
     @action(detail=False, methods=['get'], url_path='current-month/(?P<month>[^/.]+)')
-    def get_meals_for_current_month(self, request,month=None):
-        # month_str = request.query_params.get('month', None)
+    def get_meals_for_current_month(self, request, month=None):
         if month is None:
             return Response({'error': 'Month parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -111,12 +110,67 @@ class MealViewSet(viewsets.ModelViewSet):
         meals = Meal.objects.filter(date__range=[start_of_month, end_of_month])
         serializer = self.get_serializer(meals, many=True, context={'request': request})
         return Response(serializer.data)
+    @action(detail=True, methods=["get"])
+    def comments(self, request, pk=None):
+        meal = self.get_object()
+        comments = Comment.objects.filter(meal=meal)
+        serializer = CommentSerializer(comments, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get", "post", "put", "delete"])
+    def rate(self, request, pk=None):
+        meal = self.get_object()
+        if request.method == "POST":
+            rate_value = request.data.get("rate", None)
+            if rate_value is not None:
+                rate, created = Rate.objects.update_or_create(
+                    user=request.user,
+                    meal=meal,
+                    defaults={"rate": rate_value},
+                )
+                serializer = RateSerializer(rate)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(
+                {"error": "Rate value is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        elif request.method == "PUT":
+            rate = Rate.objects.filter(meal=meal, user=request.user).first()
+            if rate:
+                rate_value = request.data.get("rate", None)
+                rate.rate = rate_value
+                rate.save()
+                serializer = RateSerializer(rate)
+                return Response(serializer.data)
+            return Response(
+                {"error": "Rate not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        elif request.method == "DELETE":
+            rate = Rate.objects.filter(meal=meal, user=request.user).first()
+            if rate:
+                rate.delete()
+                return Response(
+                    {"detail": "Rate deleted successfully"},
+                    status=status.HTTP_204_NO_CONTENT,
+                )
+            return Response(
+                {"error": "Rate not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        else:  # GET method
+            rate = Rate.objects.filter(meal=meal, user=request.user).first()
+            serializer = RateSerializer(rate)
+            return Response(serializer.data)
 
 
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser])
     def latest(self, request):
@@ -125,3 +179,12 @@ class CommentViewSet(viewsets.ModelViewSet):
         ]  # Fetch the latest 10 comments
         serializer = self.get_serializer(latest_comments, many=True)
         return Response(serializer.data)
+
+
+class RateViewSet(viewsets.ModelViewSet):
+    queryset = Rate.objects.all()
+    serializer_class = RateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
