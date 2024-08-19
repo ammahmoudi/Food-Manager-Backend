@@ -8,6 +8,7 @@ class U:
     V1_FOOD = "V1_FOOD"
     V1_MEAL = "V1_MEAL"
     V1_COMMENT = "V1_COMMENT"
+    V1_RATE = "V1_RATE"
     """
     User API list
     """
