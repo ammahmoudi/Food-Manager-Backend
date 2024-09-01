@@ -1,11 +1,14 @@
 from rest_framework import viewsets, permissions
 from meal import models
 from meal.models import Food, Meal, Comment, Rate
+from meal.permissions import IsOwnerOrReadOnly
 from meal.serializers import (
+    CommentCreateSerializer,
+    CommentDetailSerializer,
+    CommentUpdateSerializer,
     CreateMealSerializer,
     FoodSerializer,
     MealSerializer,
-    CommentSerializer,
     RateSerializer,
 )
 from rest_framework.decorators import action
@@ -26,7 +29,7 @@ class FoodViewSet(viewsets.ModelViewSet):
         food = self.get_object()
         meals = Meal.objects.filter(food=food)
         comments = Comment.objects.filter(meal__in=meals)
-        serializer = CommentSerializer(
+        serializer = CommentDetailSerializer(
             comments, many=True, context={"request": request}
         )
         return Response(serializer.data)
@@ -114,7 +117,7 @@ class MealViewSet(viewsets.ModelViewSet):
     def comments(self, request, pk=None):
         meal = self.get_object()
         comments = Comment.objects.filter(meal=meal)
-        serializer = CommentSerializer(comments, many=True)
+        serializer = CommentDetailSerializer(comments, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=["get", "post", "put", "delete"])
@@ -166,20 +169,23 @@ class MealViewSet(viewsets.ModelViewSet):
 
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.all()
-    serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CommentCreateSerializer
+        elif self.action == 'update' or self.action == 'partial_update':
+            return CommentUpdateSerializer
+        return CommentDetailSerializer
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser])
     def latest(self, request):
-        latest_comments = Comment.objects.order_by("text")[
-            :10
-        ]  # Fetch the latest 10 comments
-        serializer = self.get_serializer(latest_comments, many=True)
+        latest_comments = Comment.objects.order_by("-created_at")[:10]
+        serializer = CommentDetailSerializer(latest_comments, many=True, context={'request': request})
         return Response(serializer.data)
-
 
 class RateViewSet(viewsets.ModelViewSet):
     queryset = Rate.objects.all()

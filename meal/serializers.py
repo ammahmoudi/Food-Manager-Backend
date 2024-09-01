@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from user.serializers import UserSerializer
+from user.serializers import PublicUserSerializer, UserSerializer
 from .models import Food, Meal, Comment, Rate
 from django.db.models import Avg
 
@@ -64,9 +64,31 @@ class CreateMealSerializer(serializers.ModelSerializer):
         return meal
 
 
-class CommentSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    meal = MealSerializer()
+class CommentCreateSerializer(serializers.ModelSerializer):
+    meal_id = serializers.PrimaryKeyRelatedField(queryset=Meal.objects.all(), write_only=True, source='meal')
+
+    class Meta:
+        model = Comment
+        fields = ['meal_id', 'text']
+
+    def create(self, validated_data):
+        request = self.context.get('request', None)
+        if request and hasattr(request, 'user'):
+            validated_data['user'] = request.user
+        return super().create(validated_data)
+    
+class CommentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ['text']
+
+    def update(self, instance, validated_data):
+        instance.text = validated_data.get('text', instance.text)
+        instance.save()
+        return instance
+class CommentDetailSerializer(serializers.ModelSerializer):
+    user = PublicUserSerializer(read_only=True)
+    meal = MealSerializer(read_only=True)
 
     class Meta:
         model = Comment
@@ -78,14 +100,7 @@ class CommentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at"
         ]
-        read_only_fields = ['created_at', 'updated_at']
-
-    def create(self, validated_data):
-        request = self.context.get('request', None)
-        if request and hasattr(request, 'user'):
-            validated_data['user'] = request.user
-        return super().create(validated_data)
-
+        read_only_fields = ['created_at', 'updated_at', 'user', 'meal']
 
 class RateSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
