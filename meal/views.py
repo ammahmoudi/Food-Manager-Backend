@@ -116,8 +116,8 @@ class MealViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def comments(self, request, pk=None):
         meal = self.get_object()
-        comments = Comment.objects.filter(meal=meal)
-        serializer = CommentDetailSerializer(comments, many=True)
+        comments = Comment.objects.filter(meal=meal).order_by("-updated_at")
+        serializer = CommentDetailSerializer(comments, many=True,context={"request": request})
         return Response(serializer.data)
 
     @action(detail=True, methods=["get", "post", "put", "delete"])
@@ -183,7 +183,7 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser])
     def latest(self, request):
-        latest_comments = Comment.objects.order_by("-created_at")[:10]
+        latest_comments = Comment.objects.order_by("-updated_at")[:5]
         serializer = CommentDetailSerializer(latest_comments, many=True, context={'request': request})
         return Response(serializer.data)
 
