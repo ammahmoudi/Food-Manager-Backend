@@ -25,11 +25,13 @@ class FoodSerializer(serializers.ModelSerializer):
         return Meal.objects.filter(food=obj).count()
 
     def get_avg_rate(self, obj):
-        # Calculate the average rate of all meals associated with this food
-        avg_rate = Meal.objects.filter(food=obj).aggregate(Avg("avg_rate"))[
-            "avg_rate__avg"
+        # Get all the rates for meals that have this food
+        avg_rate = Rate.objects.filter(meal__food=obj).aggregate(Avg("rate"))[
+            "rate__avg"
         ]
-        return round(avg_rate, 2) if avg_rate is not None else 0
+
+        # Return avg_rate or 0 if no ratings exist
+        return round(avg_rate, 2) if avg_rate else 0
 
 
 class MealSerializer(serializers.ModelSerializer):

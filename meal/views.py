@@ -28,7 +28,7 @@ class FoodViewSet(viewsets.ModelViewSet):
     def comments(self, request, pk=None):
         food = self.get_object()
         meals = Meal.objects.filter(food=food)
-        comments = Comment.objects.filter(meal__in=meals)
+        comments = Comment.objects.filter(meal__in=meals).order_by("-updated_at")
         serializer = CommentDetailSerializer(
             comments, many=True, context={"request": request}
         )
@@ -96,7 +96,7 @@ class MealViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Meal.DoesNotExist:
             return Response(
-                {"error": "Meal not found"}, status=status.HTTP_404_NOT_FOUND
+                {"error": "Meal not found"}, status=status.HTTP_204_NO_CONTENT
             )
     @action(detail=False, methods=['get'], url_path='current-month/(?P<month>[^/.]+)')
     def get_meals_for_current_month(self, request, month=None):
