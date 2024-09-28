@@ -125,13 +125,17 @@ def replace_user_inputs(workflow_data, workflow_inputs, user_inputs):
     Replaces inputs in the workflow with the user-provided data.
     workflow_data: The original workflow JSON (already deserialized as a Python dict).
     workflow_inputs: The mapping of inputs in the workflow {node_id: input_name}.
-    user_inputs: The user-provided inputs for the job {node_id: input_value}.
+    user_inputs: The user-provided inputs for the job {node_id: {input_name: input_value}}.
     """
-    # Replace inputs in the workflow JSON
+    # Loop through each node and its input in the workflow's input mapping
     for node_id, input_name in workflow_inputs.items():
         if node_id in workflow_data and 'inputs' in workflow_data[node_id]:
-            # Check if the user has provided this input
+            # If the user has provided inputs for this node
             if node_id in user_inputs:
-                workflow_data[node_id]['inputs'][input_name] = user_inputs[node_id]
+                # Loop through the user-provided input values and assign them
+                for input_name, input_value in user_inputs[node_id].items():
+                    # Replace the corresponding input in the workflow
+                    if input_name in workflow_data[node_id]['inputs']:
+                        workflow_data[node_id]['inputs'][input_name] = input_value
 
     return workflow_data
