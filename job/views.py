@@ -14,6 +14,14 @@ from .serializers import (
 )
 from .tasks import run_test, run_workflow_task
 from utils.cui import replace_user_inputs
+import os
+import base64
+from django.conf import settings
+from PIL import Image
+from django.core.files.storage import default_storage
+from django.utils.timezone import now
+from urllib.parse import urljoin
+from django.core.files.uploadedfile import InMemoryUploadedFile
 
 
 # Workflow viewset with API schema extensions for categorization
@@ -49,11 +57,42 @@ class WorkflowViewSet(viewsets.ModelViewSet):
     def run_workflow(self, request, pk=None):
         workflow = self.get_object()
         serializer = RunWorkflowSerializer(data=request.data)
+        
         if serializer.is_valid():
             user_inputs = serializer.validated_data.get("inputs", {})
 
-            # Validate user inputs
-            if not self.validate_inputs(workflow.inputs, user_inputs):
+            processed_inputs = {}  # This will store all processed inputs
+
+            # Iterate through each node and its inputs
+            for node_id, node_inputs in user_inputs.items():
+                processed_inputs[node_id] = {}
+
+                # Handle each input (string or image)
+                for input_name, input_value in node_inputs.items():
+                    # Determine the expected input type from the workflow data
+                    expected_type = workflow.inputs.get(node_id, {}).get(input_name)
+
+                    # If the input is a file (image), handle it accordingly
+                    if isinstance(input_value, InMemoryUploadedFile):
+                        if expected_type == "image_url":
+                            # Save the image and return the URL
+                            image_path = self.save_image(input_value, request.user, workflow)
+                            processed_inputs[node_id][input_name] = image_path
+                        elif expected_type == "image_base64":
+                            # Convert the image to base64
+                            image_base64 = self.convert_image_to_base64(input_value)
+                            processed_inputs[node_id][input_name] = image_base64
+                    elif isinstance(input_value, str):
+                        # If it's a string input, simply assign it
+                        processed_inputs[node_id][input_name] = input_value
+                    else:
+                        return Response(
+                            {"error": f"Invalid input for {input_name} in node {node_id}"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+            # Validate inputs
+            if not self.validate_inputs(workflow.inputs, processed_inputs):
                 return Response(
                     {"error": "Invalid inputs provided."},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -62,20 +101,49 @@ class WorkflowViewSet(viewsets.ModelViewSet):
             # Create a job and run the workflow
             job = Job.objects.create(
                 workflow=workflow,
-                input_data=user_inputs,
+                input_data=processed_inputs,
                 user=self.request.user,
                 status="pending",
             )
-            modified_workflow = replace_user_inputs(
-                workflow.json_data, workflow.inputs, user_inputs
-            )
-            run_workflow_task.delay(job.id, modified_workflow)
-            
 
+            modified_workflow = replace_user_inputs(
+                workflow.json_data, workflow.inputs, processed_inputs
+            )
+
+            run_workflow_task.delay(job.id, modified_workflow)
             return Response({"job_id": job.id}, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def save_image(self, image_file, user, workflow):
+        """Save image to a folder and return the URL."""
+        user_dir = f"media/{user.id}/{workflow.id}/"
+        if not os.path.exists(user_dir):
+            os.makedirs(user_dir)
+
+        image_path = os.path.join(user_dir, image_file.name)
+        with open(image_path, 'wb') as f:
+            for chunk in image_file.chunks():
+                f.write(chunk)
+
+        # Return the relative path as a URL (adjust based on your URL setup)
+        return f"/media/{user.id}/{workflow.id}/{image_file.name}"
+
+    def convert_image_to_base64(self, image_file):
+        """Convert the image file to a base64-encoded string."""
+        image_data = image_file.read()
+        base64_str = base64.b64encode(image_data).decode('utf-8')
+        return base64_str
+
+    def validate_inputs(self, workflow_inputs, processed_inputs):
+        """Validate if all necessary inputs are provided and correctly formatted."""
+        for node_id, node_inputs in workflow_inputs.items():
+            if node_id not in processed_inputs:
+                return False
+            for input_name in node_inputs:
+                if input_name not in processed_inputs[node_id]:
+                    return False
+        return True
     def validate_inputs(self, workflow_inputs, user_inputs):
         for node_id, input_name in workflow_inputs.items():
             if node_id not in user_inputs:
@@ -143,13 +211,13 @@ class JobViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         # Use different serializers for creating and retrieving jobs
-        if self.action == 'create':
+        if self.action == "create":
             return JobCreateSerializer
         return JobSerializer
 
     def get_serializer(self, *args, **kwargs):
         # Pass the request context to the serializer
-        kwargs['context'] = self.get_serializer_context()
+        kwargs["context"] = self.get_serializer_context()
         return super().get_serializer(*args, **kwargs)
 
     def perform_create(self, serializer):
@@ -158,21 +226,21 @@ class JobViewSet(viewsets.ModelViewSet):
 
     # Custom action to get the job status
     @extend_schema(summary="Get job status", tags=["Jobs"])
-    @action(detail=True, methods=['get'], url_path='status')
+    @action(detail=True, methods=["get"], url_path="status")
     def get_status(self, request, pk=None):
         job = self.get_object()
-        return Response({'status': job.status}, status=status.HTTP_200_OK)
+        return Response({"status": job.status}, status=status.HTTP_200_OK)
 
     # Custom action to get the job result
     @extend_schema(summary="Get job result", tags=["Jobs"])
-    @action(detail=True, methods=['get'], url_path='result')
+    @action(detail=True, methods=["get"], url_path="result")
     def get_result(self, request, pk=None):
         job = self.get_object()
-        return Response({'result_data': job.result_data}, status=status.HTTP_200_OK)
+        return Response({"result_data": job.result_data}, status=status.HTTP_200_OK)
 
     # Custom action to get the job logs
     @extend_schema(summary="Get job logs", tags=["Jobs"])
-    @action(detail=True, methods=['get'], url_path='log')
+    @action(detail=True, methods=["get"], url_path="log")
     def get_logs(self, request, pk=None):
         job = self.get_object()
-        return Response({'logs': job.logs}, status=status.HTTP_200_OK)
+        return Response({"logs": job.logs}, status=status.HTTP_200_OK)

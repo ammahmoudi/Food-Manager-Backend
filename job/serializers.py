@@ -3,6 +3,8 @@ from .models import Workflow, Job
 from rest_framework import serializers
 from django.conf import settings
 from urllib.parse import urljoin
+from rest_framework import serializers
+from .models import Workflow, Job
 
 class JobSerializer(serializers.ModelSerializer):
     class Meta:
@@ -47,10 +49,21 @@ class WorkflowSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'json_data', 'last_modified', 'inputs', 'user']
 
 class RunWorkflowSerializer(serializers.Serializer):
-    inputs = serializers.JSONField(help_text="The input data for running the workflow.")
+    inputs = serializers.DictField(
+        child=serializers.DictField(
+            child=serializers.FileField(allow_empty_file=False, required=False),  # Can be a file
+            help_text="Each node input can either be a string or an image file.",
+        ),
+        help_text="Inputs with node IDs, where each node has its respective input values (strings or image files).",
+    )
+    
+    def validate_inputs(self, data):
+        # You can add further validation logic here if necessary, such as validating the input types
+        return data
 
-from rest_framework import serializers
-from .models import Workflow, Job
+    def to_representation(self, instance):
+        # Customize the representation if necessary
+        return super().to_representation(instance)
 
 class WorkflowCreateSerializer(serializers.ModelSerializer):
     class Meta:
