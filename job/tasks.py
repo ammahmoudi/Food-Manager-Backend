@@ -46,12 +46,16 @@ def run_workflow_task(self, job_id, modified_workflow):
                 # Store the relative URL
                 relative_url = os.path.relpath(file_path, settings.MEDIA_ROOT)
                 image_urls.append(os.path.join(settings.MEDIA_URL, relative_url))
-
+        print(image_urls)
         # Save the result URLs to the job
+        job = Job.objects.get(id=job_id)
+
         job.result_data = {"image_urls": image_urls}
         job.status = "completed"
 
     except Exception as e:
+        job = Job.objects.get(id=job_id)
+
         # In case of failure, log the error and mark job as failed
         job.status = "failed"
         job.logs = (job.logs or "") + str(e)
@@ -66,3 +70,16 @@ def run_workflow_task(self, job_id, modified_workflow):
         job.save()  # Save job status, result, and logs
 
     return job_id
+
+
+
+
+
+
+@shared_task(bind=True)
+def run_test(self):
+    """
+    Celery task to execute the workflow with user-provided inputs and track its duration.
+    """
+    print('test')
+

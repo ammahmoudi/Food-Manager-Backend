@@ -1,10 +1,5 @@
 from rest_framework import serializers
 from .models import Workflow, Job
-
-class WorkflowSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Workflow
-        fields = ['id', 'name', 'json_data', 'last_modified', 'inputs', 'user']
 from rest_framework import serializers
 from django.conf import settings
 from urllib.parse import urljoin
@@ -34,7 +29,22 @@ class JobSerializer(serializers.ModelSerializer):
             representation['result_data']['image_urls'] = full_image_urls
 
         return representation
+class JobCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Job
+        fields = ['workflow', 'input_data']
 
+    def create(self, validated_data):
+        # Set the user from the request context
+        request = self.context.get("request", None)
+        if request and hasattr(request, "user"):
+            validated_data["user"] = request.user
+        return super().create(validated_data)
+
+class WorkflowSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Workflow
+        fields = ['id', 'name', 'json_data', 'last_modified', 'inputs', 'user']
 
 class RunWorkflowSerializer(serializers.Serializer):
     inputs = serializers.JSONField(help_text="The input data for running the workflow.")
@@ -53,18 +63,7 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
         if request and hasattr(request, "user"):
             validated_data["user"] = request.user
         return super().create(validated_data)
-class JobCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Job
-        fields = ['workflow', 'input_data']
 
-    def create(self, validated_data):
-        # Set the user from the request context
-        request = self.context.get("request", None)
-        if request and hasattr(request, "user"):
-            validated_data["user"] = request.user
-        return super().create(validated_data)
-from rest_framework import serializers
 
 class WorkflowJSONSerializer(serializers.Serializer):
     json_data = serializers.JSONField(help_text="The JSON data representing the workflow structure.")

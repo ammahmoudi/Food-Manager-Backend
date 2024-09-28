@@ -12,7 +12,7 @@ from .serializers import (
     JobSerializer,
     RunWorkflowSerializer,
 )
-from .tasks import run_workflow_task
+from .tasks import run_test, run_workflow_task
 from utils.cui import replace_user_inputs
 
 
@@ -70,6 +70,7 @@ class WorkflowViewSet(viewsets.ModelViewSet):
                 workflow.json_data, workflow.inputs, user_inputs
             )
             run_workflow_task.delay(job.id, modified_workflow)
+            
 
             return Response({"job_id": job.id}, status=status.HTTP_201_CREATED)
 
@@ -140,10 +141,38 @@ class WorkflowViewSet(viewsets.ModelViewSet):
 class JobViewSet(viewsets.ModelViewSet):
     queryset = Job.objects.all()
 
+    def get_serializer_class(self):
+        # Use different serializers for creating and retrieving jobs
+        if self.action == 'create':
+            return JobCreateSerializer
+        return JobSerializer
+
     def get_serializer(self, *args, **kwargs):
-         # Pass the request context to the serializer
+        # Pass the request context to the serializer
         kwargs['context'] = self.get_serializer_context()
         return super().get_serializer(*args, **kwargs)
+
     def perform_create(self, serializer):
         # Automatically assign the authenticated user
         serializer.save(user=self.request.user)
+
+    # Custom action to get the job status
+    @extend_schema(summary="Get job status", tags=["Jobs"])
+    @action(detail=True, methods=['get'], url_path='status')
+    def get_status(self, request, pk=None):
+        job = self.get_object()
+        return Response({'status': job.status}, status=status.HTTP_200_OK)
+
+    # Custom action to get the job result
+    @extend_schema(summary="Get job result", tags=["Jobs"])
+    @action(detail=True, methods=['get'], url_path='result')
+    def get_result(self, request, pk=None):
+        job = self.get_object()
+        return Response({'result_data': job.result_data}, status=status.HTTP_200_OK)
+
+    # Custom action to get the job logs
+    @extend_schema(summary="Get job logs", tags=["Jobs"])
+    @action(detail=True, methods=['get'], url_path='log')
+    def get_logs(self, request, pk=None):
+        job = self.get_object()
+        return Response({'logs': job.logs}, status=status.HTTP_200_OK)
