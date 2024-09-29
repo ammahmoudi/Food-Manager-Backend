@@ -16,9 +16,13 @@ class JobSerializer(serializers.ModelSerializer):
 
         # Convert relative URLs to full URLs in result_data
         request = self.context.get('request')
-        if 'result_data' in representation and 'image_urls' in representation['result_data']:
-            image_urls = representation['result_data']['image_urls']
+
+        # Ensure result_data exists and is not None
+        result_data = representation.get('result_data', None)
+        if result_data and 'image_urls' in result_data:
+            image_urls = result_data['image_urls']
             full_image_urls = []
+
             for url in image_urls:
                 # Check if it's a relative URL and convert it to a full URL
                 if not url.startswith('http'):
@@ -48,22 +52,38 @@ class WorkflowSerializer(serializers.ModelSerializer):
         model = Workflow
         fields = ['id', 'name', 'json_data', 'last_modified', 'inputs', 'user']
 
+
+
+
+
+class NodeInputSerializer(serializers.Serializer):
+    """Handles both string and file types for node inputs."""
+    input_value = serializers.CharField(required=False)
+    input_file = serializers.ImageField(required=False)
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            return {"input_value": data}  # Handle string input
+        elif hasattr(data, "read"):  # Check if it's a file object
+            return {"input_file": data}  # Handle image file
+        raise serializers.ValidationError("Each input must be a string or an image file.")
+
 class RunWorkflowSerializer(serializers.Serializer):
+    """Serializer to handle workflow inputs with nodes."""
     inputs = serializers.DictField(
         child=serializers.DictField(
-            child=serializers.FileField(allow_empty_file=False, required=False),  # Can be a file
-            help_text="Each node input can either be a string or an image file.",
+            child=NodeInputSerializer(),
+            help_text="Each node input may contain either a string or an image file."
         ),
-        help_text="Inputs with node IDs, where each node has its respective input values (strings or image files).",
+        help_text="A dictionary of node IDs and their input data (either a string or an image file)."
     )
-    
-    def validate_inputs(self, data):
-        # You can add further validation logic here if necessary, such as validating the input types
-        return data
 
-    def to_representation(self, instance):
-        # Customize the representation if necessary
-        return super().to_representation(instance)
+
+
+
+
+
+
 
 class WorkflowCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -80,3 +100,10 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
 
 class WorkflowJSONSerializer(serializers.Serializer):
     json_data = serializers.JSONField(help_text="The JSON data representing the workflow structure.")
+from rest_framework import serializers
+from .models import SpecializedWorkflowRunner
+
+class SpecializedWorkflowRunnerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SpecializedWorkflowRunner
+        fields = ['id', 'workflow', 'name', 'input_mapping', 'created_by', 'created_at']

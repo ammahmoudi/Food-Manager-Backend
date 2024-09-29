@@ -1,4 +1,5 @@
 from django.db import models
+from django.forms import JSONField
 
 from user.models import User
 
@@ -41,3 +42,12 @@ class Job(models.Model):
 
     def __str__(self):
         return f"Job {self.id} for Workflow {self.workflow.id} - Status: {self.status}"
+class SpecializedWorkflowRunner(models.Model):
+    workflow = models.ForeignKey('Workflow', on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    input_mapping = JSONField(help_text="Mapping of API inputs to workflow inputs")
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name

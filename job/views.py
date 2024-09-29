@@ -3,8 +3,9 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema_view, extend_schema
-from .models import Workflow, Job
+from .models import SpecializedWorkflowRunner, Workflow, Job
 from .serializers import (
+    SpecializedWorkflowRunnerSerializer,
     WorkflowCreateSerializer,
     WorkflowJSONSerializer,
     WorkflowSerializer,
@@ -57,48 +58,45 @@ class WorkflowViewSet(viewsets.ModelViewSet):
     def run_workflow(self, request, pk=None):
         workflow = self.get_object()
         serializer = RunWorkflowSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             user_inputs = serializer.validated_data.get("inputs", {})
+            processed_inputs = {}  # Store the final processed inputs
 
-            processed_inputs = {}  # This will store all processed inputs
-
-            # Iterate through each node and its inputs
             for node_id, node_inputs in user_inputs.items():
                 processed_inputs[node_id] = {}
 
-                # Handle each input (string or image)
-                for input_name, input_value in node_inputs.items():
-                    # Determine the expected input type from the workflow data
-                    expected_type = workflow.inputs.get(node_id, {}).get(input_name)
+                for input_name, input_data in node_inputs.items():
+                    expected_type = workflow.inputs.get(node_id, {}).get(input_name)[
+                        "type"
+                    ]
 
-                    # If the input is a file (image), handle it accordingly
-                    if isinstance(input_value, InMemoryUploadedFile):
-                        if expected_type == "image_url":
-                            # Save the image and return the URL
-                            image_path = self.save_image(input_value, request.user, workflow)
-                            processed_inputs[node_id][input_name] = image_path
-                        elif expected_type == "image_base64":
-                            # Convert the image to base64
-                            image_base64 = self.convert_image_to_base64(input_value)
-                            processed_inputs[node_id][input_name] = image_base64
-                    elif isinstance(input_value, str):
-                        # If it's a string input, simply assign it
-                        processed_inputs[node_id][input_name] = input_value
-                    else:
-                        return Response(
-                            {"error": f"Invalid input for {input_name} in node {node_id}"},
-                            status=status.HTTP_400_BAD_REQUEST,
+                    if expected_type == "image_url":
+                        # Save the image as a file and get its full URL
+                        image_path = self.save_base64_image(
+                            input_data["input_value"], request.user, workflow, request
                         )
+                        print("image url:", image_path)
+                        processed_inputs[node_id][input_name] = image_path
+                    elif expected_type == "image_base64":
+                        # Use the base64 image directly
+                        processed_inputs[node_id][input_name] = input_data[
+                            "input_value"
+                        ]
+                        print("image base64:")
+                    elif expected_type == "string":
+                        processed_inputs[node_id][input_name] = input_data[
+                            "input_value"
+                        ]
 
-            # Validate inputs
+            # Validate inputs and run the workflow
             if not self.validate_inputs(workflow.inputs, processed_inputs):
                 return Response(
                     {"error": "Invalid inputs provided."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Create a job and run the workflow
+            # Create the job and run the workflow
             job = Job.objects.create(
                 workflow=workflow,
                 input_data=processed_inputs,
@@ -109,30 +107,46 @@ class WorkflowViewSet(viewsets.ModelViewSet):
             modified_workflow = replace_user_inputs(
                 workflow.json_data, workflow.inputs, processed_inputs
             )
-
             run_workflow_task.delay(job.id, modified_workflow)
+
             return Response({"job_id": job.id}, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def save_image(self, image_file, user, workflow):
-        """Save image to a folder and return the URL."""
-        user_dir = f"media/{user.id}/{workflow.id}/"
+    def save_base64_image(self, image_base64, user, workflow, request):
+        """Save base64-encoded image to a file and return the full URL."""
+        user_dir = f"media/user_{user.id}/w_{workflow.id}/"
         if not os.path.exists(user_dir):
             os.makedirs(user_dir)
 
-        image_path = os.path.join(user_dir, image_file.name)
-        with open(image_path, 'wb') as f:
-            for chunk in image_file.chunks():
-                f.write(chunk)
+        # Extract image format (assuming data:image/jpeg;base64,... or similar)
+        format, imgstr = image_base64.split(";base64,")
+        ext = format.split("/")[-1]  # Extract the file extension (e.g., jpg, png)
 
-        # Return the relative path as a URL (adjust based on your URL setup)
-        return f"/media/{user.id}/{workflow.id}/{image_file.name}"
+        # Generate a unique file name
+        file_name = f"{user.id}_{workflow.id}_{self.generate_random_filename()}.{ext}"
+        file_path = os.path.join(user_dir, file_name)
+
+        # Decode the base64 string and save it as an image file
+        with open(file_path, "wb") as f:
+            f.write(base64.b64decode(imgstr))
+
+        # Get the full URL of the saved image
+        relative_url = f"/media/user_{user.id}/w_{workflow.id}/{file_name}"
+        full_url = request.build_absolute_uri(relative_url)
+
+        return full_url
+
+    def generate_random_filename(self):
+        """Generate a random string for file names."""
+        import uuid
+
+        return str(uuid.uuid4())
 
     def convert_image_to_base64(self, image_file):
         """Convert the image file to a base64-encoded string."""
         image_data = image_file.read()
-        base64_str = base64.b64encode(image_data).decode('utf-8')
+        base64_str = base64.b64encode(image_data).decode("utf-8")
         return base64_str
 
     def validate_inputs(self, workflow_inputs, processed_inputs):
@@ -143,11 +157,6 @@ class WorkflowViewSet(viewsets.ModelViewSet):
             for input_name in node_inputs:
                 if input_name not in processed_inputs[node_id]:
                     return False
-        return True
-    def validate_inputs(self, workflow_inputs, user_inputs):
-        for node_id, input_name in workflow_inputs.items():
-            if node_id not in user_inputs:
-                return False
         return True
 
     @extend_schema(
@@ -195,6 +204,74 @@ class WorkflowViewSet(viewsets.ModelViewSet):
             }
             nodes.append(node)
         return nodes
+
+
+class SpecializedWorkflowRunnerViewSet(viewsets.ModelViewSet):
+    queryset = SpecializedWorkflowRunner.objects.all()
+    serializer_class = SpecializedWorkflowRunnerSerializer
+
+    @action(detail=True, methods=["post"], url_path="run")
+    def run_specialized_workflow(self, request, pk=None):
+        specialized_runner = self.get_object()
+        workflow = specialized_runner.workflow
+        input_mapping = specialized_runner.input_mapping
+
+        # Validate user inputs
+        serializer = RunWorkflowSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user_inputs = serializer.validated_data.get("inputs", {})
+        processed_inputs = self.prepare_inputs(user_inputs, input_mapping, workflow)
+
+        # Validate and run the workflow
+        if not self.validate_inputs(workflow.inputs, processed_inputs):
+            return Response(
+                {"error": "Invalid inputs provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create job and run workflow
+        job = Job.objects.create(
+            workflow=workflow,
+            input_data=processed_inputs,
+            user=request.user,
+            status="pending",
+        )
+
+        modified_workflow = replace_user_inputs(
+            workflow.json_data, workflow.inputs, processed_inputs
+        )
+        run_workflow_task.delay(job.id, modified_workflow)
+
+        return Response({"job_id": job.id}, status=status.HTTP_201_CREATED)
+
+    def prepare_inputs(self, user_inputs, input_mapping, workflow):
+        processed_inputs = {}
+        for node_id, node_inputs in input_mapping.items():
+            processed_inputs[node_id] = {}
+            for input_name, api_input_name in node_inputs.items():
+                # Get the input from user inputs
+                if api_input_name in user_inputs:
+                    processed_inputs[node_id][input_name] = user_inputs[api_input_name]
+        return processed_inputs
+
+    def validate_inputs(self, workflow_inputs, processed_inputs):
+        """Validate if all necessary inputs are provided and correctly formatted."""
+        for node_id, node_inputs in workflow_inputs.items():
+            if node_id not in processed_inputs:
+                return False
+            for input_name in node_inputs:
+                if input_name not in processed_inputs[node_id]:
+                    return False
+        return True
+
+    @action(detail=False, methods=["post"], url_path="characters/prompt")
+    def generate_character_image(self, request):
+        specialized_runner = SpecializedWorkflowRunner.objects.get(
+            name="Generate Character Image from Prompt"
+        )
+        return self.run_specialized_workflow(request, specialized_runner.pk)
 
 
 # Job viewset with API schema extensions for categorization
