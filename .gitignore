@@ -163,3 +163,4 @@ cython_debug/
 media/user_images/
 media/food_images/
 media/
+*/migrations/*
