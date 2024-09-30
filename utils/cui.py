@@ -6,7 +6,7 @@ import urllib.request
 import urllib.parse
 import websocket
 from PIL import Image
-from job.models import Job
+from job.models.Job import Job
 
 SERVER_ADDRESS = "127.0.0.1:8188"
 client_id = str(uuid.uuid4())
@@ -50,6 +50,7 @@ def get_images(ws, prompt, client_id, job_id):
 
     # Fetch the job instance once at the start
     job = Job.objects.get(id=job_id)
+    print('starting the loop')
 
     while True:
         try:
@@ -72,6 +73,7 @@ def get_images(ws, prompt, client_id, job_id):
         except websocket.WebSocketException as e:
             job.logs = (job.logs or "") + f"WebSocket Error: {str(e)}\n"
             job.save()
+            print(f"WebSocket Error: {str(e)}\n")
             break  # Exit the loop on WebSocket error
 
     # Fetch the job's history after WebSocket execution
@@ -101,19 +103,20 @@ def run_workflow(prompt, job_id, client_id):
 
     try:
         # Run the image generation process and pass the job ID for logging
-        # print(job_id)
+        print(job_id)
         images = get_images(ws, prompt, client_id, job_id)
         job = Job.objects.get(id=job_id)
 
         # Update job output images in the database
         # job.result_data = images
         job.status = "completed"
-        # print(job.logs)
+        print('completed')
     except Exception as e:
         job = Job.objects.get(id=job_id)
         # Log errors in the job logs field
         job.status = "failed"
         job.logs = (job.logs or "") + f"Error: {str(e)}\n"
+        print(f"Error: {str(e)}\n")
         # job.output_images = {"error": str(e)}
     finally:
         job.save()

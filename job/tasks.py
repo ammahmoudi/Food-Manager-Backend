@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 from django.utils.timezone import now
 from celery import shared_task
-from .models import Job
+from job.models.Job import Job
 from utils.cui import run_workflow  # Assuming run_workflow function is defined in utils
 
 
