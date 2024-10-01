@@ -25,6 +25,6 @@ class Job(models.Model):
     )  # Input data for the job (now JSONField)
     logs = models.TextField(null=True, blank=True)  # Field for logs
     user = models.ForeignKey(User, on_delete=models.CASCADE)  # Link to the Django user
-
+    dataset = models.ForeignKey('job.Dataset', related_name='jobs', on_delete=models.CASCADE,null=True,blank=True)  # A Job belongs to one Dataset
     def __str__(self):
         return f"Job {self.id} for Workflow {self.workflow.id} - Status: {self.status}"

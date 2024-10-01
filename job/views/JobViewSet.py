@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema_view, extend_schema
 from job.models.Job import Job
+from job.serializers.DatasetSeriallizers import DatasetImageSerializer
 from job.serializers.JobSerializers import JobCreateSerializer, JobSerializer
 
 @extend_schema_view(
@@ -52,3 +53,11 @@ class JobViewSet(viewsets.ModelViewSet):
     def get_logs(self, request, pk=None):
         job = self.get_object()
         return Response({"logs": job.logs}, status=status.HTTP_200_OK)
+    
+    @extend_schema(summary="Get job images", tags=["Jobs"])
+    @action(detail=True, methods=["get"], url_path="images")
+    def get_job_images(self, request, pk=None):
+        job = self.get_object()
+        images = job.dataset_images.all()  # Get associated dataset images for the job
+        serializer = DatasetImageSerializer(images, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -8,7 +8,7 @@ from job.models.Job import Job
 class JobSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
-        fields = ['id', 'workflow', 'status', 'runtime', 'result_data', 'input_data', 'logs', 'user']
+        fields = ['id', 'workflow', 'status', 'runtime', 'images' ,'result_data', 'input_data', 'logs', 'user','dataset']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)

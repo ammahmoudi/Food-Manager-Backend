@@ -1,4 +1,5 @@
 import json
+import re
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -79,24 +80,36 @@ class WorkflowViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def _prepare_inputs(self, workflow, user_inputs, request):
-        """Prepare inputs for the workflow, processing base64 images or other data."""
+        """Prepare inputs for the workflow, processing base64 images, URLs, static paths, or other data."""
         processed_inputs = {}
         for node_id, node_inputs in user_inputs.items():
             processed_inputs[node_id] = {}
             for input_name, input_data in node_inputs.items():
-                expected_type = (
-                    workflow.inputs.get(node_id, {}).get(input_name, {})
-                )
-                if expected_type == "image_url":
-                    image_path = self.save_base64_image(
-                        input_data["input_value"], request.user, workflow, request
-                    )
-                    processed_inputs[node_id][input_name] = image_path
+                expected_type = workflow.inputs.get(node_id, {}).get(input_name, {})
+
+                # Check if input is a base64 string (based on the pattern "data:image/*;base64,...")
+                if expected_type == "image_url" and self.is_base64_image(input_data.get("input_value", "")):
+                    image_url = self.save_base64_image(input_data["input_value"], request.user, workflow, request)
+                    processed_inputs[node_id][input_name] = image_url
+
+                # If input is already a URL or relative/static path
+                elif expected_type == "image_url" and (input_data.get("input_value", "").startswith("http") or input_data.get("input_value", "").startswith("/")):
+                    processed_inputs[node_id][input_name] = input_data["input_value"]
+
+                # If expected type is base64, use the base64 image directly
                 elif expected_type == "image_base64":
                     processed_inputs[node_id][input_name] = input_data["input_value"]
+
+                # If expected type is string, use it as is
                 elif expected_type == "string":
                     processed_inputs[node_id][input_name] = input_data["input_value"]
+
         return processed_inputs
+
+    def is_base64_image(self, input_value):
+        """Check if the input string is a base64-encoded image."""
+        base64_pattern = re.compile(r"^data:image\/[a-zA-Z]+;base64,")
+        return base64_pattern.match(input_value) is not None
 
     def _validate_inputs(self, workflow_inputs, processed_inputs):
         """Validate if all necessary inputs are provided and correctly formatted."""

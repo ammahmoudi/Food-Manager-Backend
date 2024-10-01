@@ -2,9 +2,10 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, extend_schema_view
-
+from rest_framework import serializers
 from job.models.Dataset import Character, Dataset, DatasetImage
-from job.serializers.DatasetSeriallizers import AddImageToDatasetSerializer, CharacterSerializer, DatasetImageSerializer, DatasetSerializer
+from job.models.Job import Job
+from job.serializers.DatasetSeriallizers import AddImageToDatasetSerializer, CharacterSerializer, DatasetCreateSerializer, DatasetImageSerializer, DatasetSerializer, ImageDatasetSerializer, JobDatasetSerializer
 
 @extend_schema_view(
     list=extend_schema(summary="List all datasets", tags=["Datasets"]),
@@ -16,7 +17,24 @@ from job.serializers.DatasetSeriallizers import AddImageToDatasetSerializer, Cha
 )
 class DatasetViewSet(viewsets.ModelViewSet):
     queryset = Dataset.objects.all()
-    serializer_class = DatasetSerializer
+
+    def get_serializer_class(self):
+        """Determine which serializer to use based on dataset type."""
+        if self.action == 'create':
+            return DatasetCreateSerializer
+        dataset = self.get_object()
+        if dataset.dataset_type == 'image':
+            return ImageDatasetSerializer
+        elif dataset.dataset_type == 'job':
+            return JobDatasetSerializer
+        return super().get_serializer_class()  # Fallback if needed
+
+    def create(self, request, *args, **kwargs):
+        """Custom create method to handle dataset creation."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         summary="Add images to an existing dataset",
@@ -29,18 +47,46 @@ class DatasetViewSet(viewsets.ModelViewSet):
         },
     )
     @action(detail=True, methods=["post"], url_path="add-images")
-    def add_images(self, request, pk=None):
+    def add_images(self, request, pk=None): 
         dataset = self.get_object()
+
+        # Ensure this is an image-based dataset
+        if dataset.dataset_type != 'image':
+            return Response({"error": "This dataset does not accept images."}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = AddImageToDatasetSerializer(data=request.data, many=True)
-
         if serializer.is_valid():
+            images_added = []
             for image_data in serializer.validated_data:
-                DatasetImage.objects.create(dataset=dataset, created_by=request.user, **image_data)
+                dataset_image = DatasetImage.objects.create(
+                    dataset=dataset, created_by=request.user, **image_data
+                )
+                images_added.append(dataset_image)
 
-            return Response({"status": "images added"}, status=status.HTTP_200_OK)
+            return Response({"status": "images added", "image_ids": [img.id for img in images_added]}, status=status.HTTP_200_OK)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    @extend_schema(
+        summary="Add jobs to an existing dataset",
+        description="Add new jobs to an existing dataset.",
+        tags=["Datasets"],
+        request=serializers.PrimaryKeyRelatedField(queryset=Job.objects.all(), many=True),
+        responses={200: "Jobs successfully added.", 400: "Invalid data."},
+    )
+    @action(detail=True, methods=["post"], url_path="add-jobs")
+    def add_jobs(self, request, pk=None):
+        dataset = self.get_object()
+        job_ids = request.data.get('job_ids', [])
 
+        for job_id in job_ids:
+            try:
+                job = Job.objects.get(id=job_id)
+                job.dataset = dataset  # Associate the job with the dataset
+                job.save()
+            except Job.DoesNotExist:
+                return Response({"error": f"Job {job_id} does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"status": "Jobs added to dataset"}, status=status.HTTP_200_OK)
 
 @extend_schema_view(
     list=extend_schema(summary="List all dataset images", tags=["Dataset Images"]),
