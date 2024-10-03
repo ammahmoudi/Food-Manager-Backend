@@ -85,7 +85,7 @@ class DatasetImage(models.Model):
 class Character(models.Model):
     name = models.CharField(max_length=255)
     loras = models.JSONField(
-        default=list, blank=True
+        default=dict, blank=True
     )  # List of strings representing loras
     datasets = models.ManyToManyField(
         Dataset,
