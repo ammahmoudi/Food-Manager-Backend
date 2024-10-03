@@ -29,9 +29,9 @@ DEBUG = True
 
 CSRF_COOKIE_SECURE = False
 # Additional configuration
-ALLOWED_HOSTS = ["localhost"]
-CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://localhost:3000"]
-CORS_ORIGIN_WHITELIST = ["http://localhost:8000", "http://localhost:3000"]
+ALLOWED_HOSTS = ["*"]
+CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://localhost:3000","http://192.168.40.39:8000","http://192.168.83.160:3000","http://192.168.83.175:8000","http://192.168.40.144:3000","http://192.168.40.33:3000"]
+CORS_ORIGIN_WHITELIST = ["http://localhost:8000", "http://localhost:3000","http://192.168.40.39:8000","http://192.168.83.160:3000","http://192.168.83.175:8000","http://192.168.40.144:3000","http://192.168.40.33:3000"]
 PHONENUMBER_DEFAULT_REGION = 'IR'
 PHONENUMBER_DB_FORMAT = 'INTERNATIONAL'
 # Application definition
@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "phonenumber_field",
     "user",
     "meal",
+    "job"
 ]
 
 AUTH_USER_MODEL = "user.User"
@@ -174,3 +175,4 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+CELERY_BROKER_URL = 'redis://localhost:6379/0'

@@ -162,3 +162,5 @@ cython_debug/
 #.idea/
 media/user_images/
 media/food_images/
+media/
+*/migrations/*
