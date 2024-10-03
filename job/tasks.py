@@ -24,7 +24,7 @@ def run_workflow_task(self, job_id, modified_workflow):
     try:
         # Run the workflow and get images in byte form
         client_id = str(self.request.id)  # Unique client ID from Celery task
-        images = run_workflow(modified_workflow, job_id, client_id)
+        images,texts = run_workflow(modified_workflow, job_id, client_id)
         job = Job.objects.get(id=job_id)
 
         # If the job has no associated datasets, create a temporary dataset for the user
@@ -69,7 +69,8 @@ def run_workflow_task(self, job_id, modified_workflow):
                 )
 
         # Save the result URLs to the job
-        job.result_data = {"image_urls": image_urls}
+        job.result_data = {"image_urls": image_urls,'texts':texts}
+        
         job.status = "completed"
 
     except Exception as e:

@@ -44,13 +44,14 @@ def get_history(prompt_id):
         return json.loads(response.read())
 
 
-def get_images(ws, prompt, client_id, job_id):
+def get_results(ws, prompt, client_id, job_id):
     prompt_id = queue_prompt(prompt, client_id)["prompt_id"]
     output_images = {}
+    output_texts = {}
 
     # Fetch the job instance once at the start
     job = Job.objects.get(id=job_id)
-    print('starting the loop')
+    print("starting the loop")
 
     while True:
         try:
@@ -84,15 +85,21 @@ def get_images(ws, prompt, client_id, job_id):
     for node_id in history["outputs"]:
         node_output = history["outputs"][node_id]
         images_output = []
+        texts_output = []
         if "images" in node_output:
             for image in node_output["images"]:
                 image_data = get_image(
                     image["filename"], image["subfolder"], image["type"]
                 )
                 images_output.append(image_data)
+        elif "text" in node_output:
+            for text in node_output["text"]:
+                texts_output.append(text)
+
+        output_texts[node_id] = texts_output
         output_images[node_id] = images_output
 
-    return output_images
+    return output_images,output_texts
 
 
 def run_workflow(prompt, job_id, client_id):
@@ -103,14 +110,14 @@ def run_workflow(prompt, job_id, client_id):
 
     try:
         # Run the image generation process and pass the job ID for logging
-        print(job_id)
-        images = get_images(ws, prompt, client_id, job_id)
+        # print(job_id)
+        images,texts = get_results(ws, prompt, client_id, job_id)
         job = Job.objects.get(id=job_id)
 
         # Update job output images in the database
         # job.result_data = images
-        job.status = "completed"
-        print('completed')
+        # job.status = "completed"
+        # print("completed")
     except Exception as e:
         job = Job.objects.get(id=job_id)
         # Log errors in the job logs field
@@ -123,12 +130,12 @@ def run_workflow(prompt, job_id, client_id):
         ws.close()
 
     # Display images (optional)
-    for node_id in images:
-        for image_data in images[node_id]:
-            image = Image.open(io.BytesIO(image_data))
-            image.show()
+    # for node_id in images:
+    #     for image_data in images[node_id]:
+    #         image = Image.open(io.BytesIO(image_data))
+    #         image.show()
 
-    return images
+    return images,texts
 
 
 import json
