@@ -5,7 +5,7 @@ from . import views
 from utils.strings.url_names import U
 
 router = routers.SimpleRouter()
-router.register("users", views.UserViewSet, basename=U.V1_USER)
+router.register("push-notifications", views.PushNotificationViewSet, basename=U.V1_PUSH_NOTIFICATION)
 
 urlpatterns = [
     path("", include(router.urls)),

@@ -15,6 +15,8 @@ urlpatterns = [
     path('api/', include("user.urls")),
     path('api/', include("meal.urls")),
     path('api/cui/', include('job.urls')),  # Include the Job app's URLs
+    path('api/', include("pushNotification.urls")),
+
 ]
 
 urlpatterns = i18n_patterns(*urlpatterns, prefix_default_language=False)

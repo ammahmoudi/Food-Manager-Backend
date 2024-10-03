@@ -1,13 +1,11 @@
-from django.utils.functional import cached_property
-
+from django.conf import settings
 from django.db import models
-from django.contrib.auth.models import BaseUserManager, AbstractUser
+from django.contrib.auth.models import BaseUserManager
 from django.utils.translation import gettext_lazy as _
-
+from django.contrib.auth.models import AbstractBaseUser
 
 from utils.strings.db_names import D
 from utils.strings.field_names import S
-from django.contrib.auth.models import AbstractBaseUser
 
 
 class CustomUserManager(BaseUserManager):
@@ -37,12 +35,9 @@ class User(AbstractBaseUser):
         ("user", "User"),
         ("admin", "Admin"),
     )
-    # username = None  # Remove the username field
-    # phone_number = PhoneNumberField(_("phone number"), db_index=True, unique=True)
+
     phone_number = models.CharField(max_length=15, unique=True)
-
     full_name = models.CharField(_("full name"), max_length=150, blank=True)
-
     user_image = models.ImageField(
         _("user image"),
         upload_to="user_images/",
@@ -71,10 +66,6 @@ class User(AbstractBaseUser):
     def has_module_perms(self, app_label):
         return True
 
-    # @cached_property
-    # def is_admin(self):
-    #     return self.role == 'admin'
-
     @property
     def is_staff(self):
         return self.is_admin
@@ -91,3 +82,7 @@ class User(AbstractBaseUser):
                 violation_error_message=_("user with this phone number was exists"),
             )
         ]
+
+    def get_fcm_tokens(self):
+        """Returns all FCM tokens associated with this user."""
+        return self.fcm_tokens.all()

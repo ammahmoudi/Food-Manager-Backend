@@ -34,3 +34,4 @@ class PublicUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "full_name", "user_image", "role"]  # Exclude 'phone_number' or any other sensitive fields
+        

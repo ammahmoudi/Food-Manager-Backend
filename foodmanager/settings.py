@@ -34,6 +34,7 @@ CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://localhost:3000","http:/
 CORS_ORIGIN_WHITELIST = ["http://localhost:8000", "http://localhost:3000","http://192.168.40.39:8000","http://192.168.83.160:3000","http://192.168.83.175:8000","http://192.168.40.144:3000","http://192.168.40.70:3000"]
 PHONENUMBER_DEFAULT_REGION = 'IR'
 PHONENUMBER_DB_FORMAT = 'INTERNATIONAL'
+# Application definitionINTERNATIONAL'
 # Application definition
 
 INSTALLED_APPS = [
@@ -53,7 +54,8 @@ INSTALLED_APPS = [
     "phonenumber_field",
     "user",
     "meal",
-    "job"
+    "job",
+    'pushNotification'
 ]
 
 AUTH_USER_MODEL = "user.User"
