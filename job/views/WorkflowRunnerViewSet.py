@@ -1,15 +1,10 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework import status
-from rest_framework.decorators import action
-from rest_framework.response import Response
 from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
-    OpenApiParameter,
     OpenApiExample,
-    OpenApiResponse,
 )
 from job.models.Dataset import Character, Dataset, DatasetImage
 from job.models.Job import Job
@@ -96,7 +91,7 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
         ],  # Add this tag to categorize under 'Specialized Workflows'
     )
     @action(detail=False, methods=["post"], url_path="characters/prompt")
-    def generate_character_image(self, request):
+    def generate_character_initial_image(self, request):
         specialized_runner = self.get_runner(
             "generate_character_initial_image_with_prompt"
         )
@@ -278,27 +273,51 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
         )
 
 
-@extend_schema(
+    @extend_schema(
     operation_id="generate_character_image",
     summary="Generate a character image using the simple_flux_lora workflow",
-    description="This endpoint takes a text prompt, character ID, and a LORA name to run the 'simple_flux_lora' workflow, extracting the LORA value from the character data.",
-    request=OpenApiExample(
-        "Example",
-        value={
-            "prompt": "A warrior standing in the rain",
-            "character_id": 5,
-            "lora_name": "example_lora",
-        },
-        request_only=True,
+    description=(
+        "This endpoint takes a text prompt, character ID, and a LORA name to run the 'simple_flux_lora' workflow, "
+        "extracting the LORA value from the character data to generate a customized character image. "
+        "It returns the dataset ID where the image is stored and the associated job ID."
     ),
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Text prompt used for generating the character image.",
+                },
+                "character_id": {
+                    "type": "integer",
+                    "description": "ID of the character whose LORA data will be used.",
+                },
+                "lora_name": {
+                    "type": "string",
+                    "description": "Name of the LORA value to extract from the character data.",
+                },
+            },
+            "required": ["prompt", "character_id", "lora_name"],
+            "example": {
+                "prompt": "A warrior standing in the rain",
+                "character_id": 1,
+                "lora_name": "elahe_final",
+            },
+        }
+    },
     responses={
         200: OpenApiExample(
             "Success",
             value={
                 "dataset_id": 567,
                 "job_id": 123,
-                "status": "started"
             },
+            response_only=True,
+        ),
+        400: OpenApiExample(
+            "Bad Request",
+            value={"error": "Prompt, character_id, and lora_name are required."},
             response_only=True,
         ),
         404: OpenApiExample(
@@ -307,83 +326,93 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
             response_only=True,
         ),
     },
-    tags=["Workflow Runners"],
+    examples=[
+        OpenApiExample(
+            "Example Request",
+            value={
+                "prompt": "A warrior standing in the rain",
+                "character_id": 1,
+                "lora_name": "elahe_final",
+            },
+            request_only=True,
+        )
+    ],
+    tags=["Workflow Runners"],  # Add this tag to categorize under 'Workflow Runners'
 )
-@action(detail=False, methods=["post"], url_path="characters/generate-character-image")
-def generate_character_image(self, request):
-    # Get the specialized runner for the workflow
-    specialized_runner = self.get_runner("generate_character_image")
-    if not specialized_runner:
-        return Response(
-            {"error": "Specialized workflow runner not found."},
-            status=status.HTTP_404_NOT_FOUND,
+    @action(detail=False, methods=["post"], url_path="characters/generate-character-image")
+    def generate_character_image(self, request):
+        # Get the specialized runner for the workflow
+        specialized_runner = self.get_runner("generate_character_image")
+        if not specialized_runner:
+            return Response(
+                {"error": "Specialized workflow runner not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Prepare the inputs (prompt, character_id, and lora_name)
+        prompt = request.data.get("prompt")
+        character_id = request.data.get("character_id")
+        lora_name = request.data.get("lora_name")
+
+        if not prompt or not character_id or not lora_name:
+            return Response(
+                {"error": "Prompt, character_id, and lora_name are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Retrieve the character instance
+        try:
+            character = Character.objects.get(id=character_id)
+        except Character.DoesNotExist:
+            return Response(
+                {"error": "Character not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Retrieve the lora_value from the character's loras field
+        lora_value = character.loras.get(lora_name)
+        if not lora_value:
+            return Response(
+                {"error": f"LORA '{lora_name}' not found for the specified character."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Create a new dataset for this set of jobs
+        dataset,is_new = Dataset.objects.get_or_create(
+            name=f"Generated Character Dataset - {character_id} - {lora_name} - {request.user.full_name}",
+            created_by=request.user,
+            character=character,
+            dataset_type="job"  # Assume this is a job-based dataset
         )
 
-    # Prepare the inputs (prompt, character_id, and lora_name)
-    prompt = request.data.get("prompt")
-    character_id = request.data.get("character_id")
-    lora_name = request.data.get("lora_name")
+        # Prepare the input format required for the workflow
+        input_data = {
+            "prompt": prompt,
+            "lora_value": lora_value,  # Include the lora_value in the inputs
+        }
 
-    if not prompt or not character_id or not lora_name:
+        # Pass the inputs to the workflow
+        request.data["inputs"] = input_data
+
+        # Use the same workflow running logic
+        response = self.prepare_and_run_workflow(request, specialized_runner)
+
+        if response.status_code == status.HTTP_201_CREATED:
+            job_id = response.data.get("job_id")
+
+            # Fetch the job object
+            job = Job.objects.get(id=job_id)
+
+            # Associate the job with the new dataset
+            job.dataset = dataset
+            job.save()
+
+            return Response({
+                "dataset_id": dataset.id,
+                "job_id": job_id,
+            }, status=status.HTTP_201_CREATED)
+
         return Response(
-            {"error": "Prompt, character_id, and lora_name are required."},
+            {"error": "Failed to start the workflow."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
-    # Retrieve the character instance
-    try:
-        character = Character.objects.get(id=character_id)
-    except Character.DoesNotExist:
-        return Response(
-            {"error": "Character not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # Retrieve the lora_value from the character's loras field
-    lora_value = character.loras.get(lora_name)
-    if not lora_value:
-        return Response(
-            {"error": f"LORA '{lora_name}' not found for the specified character."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # Create a new dataset for this set of jobs
-    new_dataset = Dataset.objects.create(
-        name=f"Generated Character Dataset - {request.user.full_name}",
-        created_by=request.user,
-        character=character,
-        dataset_type="job"  # Assume this is a job-based dataset
-    )
-
-    # Prepare the input format required for the workflow
-    input_data = {
-        "prompt": prompt,
-        "lora_value": lora_value,  # Include the lora_value in the inputs
-    }
-
-    # Pass the inputs to the workflow
-    request.data["inputs"] = input_data
-
-    # Use the same workflow running logic
-    response = self.prepare_and_run_workflow(request, specialized_runner)
-
-    if response.status_code == status.HTTP_201_CREATED:
-        job_id = response.data.get("job_id")
-
-        # Fetch the job object
-        job = Job.objects.get(id=job_id)
-
-        # Associate the job with the new dataset
-        job.dataset = new_dataset
-        job.save()
-
-        return Response({
-            "dataset_id": new_dataset.id,
-            "job_id": job_id,
-            "status": "started"
-        }, status=status.HTTP_201_CREATED)
-
-    return Response(
-        {"error": "Failed to start the workflow."},
-        status=status.HTTP_400_BAD_REQUEST,
-    )

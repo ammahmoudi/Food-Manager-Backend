@@ -27,6 +27,7 @@ class Dataset(models.Model):
 
     def __str__(self):
         return self.name
+
     @property
     def is_job_based(self):
         """Return True if the dataset type is 'job'."""
