@@ -30,8 +30,8 @@ DEBUG = True
 CSRF_COOKIE_SECURE = False
 # Additional configuration
 ALLOWED_HOSTS = ["*"]
-CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://localhost:3000","http://192.168.40.39:8000","http://192.168.83.160:3000","http://192.168.83.175:8000","http://192.168.40.144:3000","http://192.168.40.14:3000"]
-CORS_ORIGIN_WHITELIST = ["http://localhost:8000", "http://localhost:3000","http://192.168.40.39:8000","http://192.168.83.160:3000","http://192.168.83.175:8000","http://192.168.40.144:3000","http://192.168.40.14:3000"]
+CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://localhost:3000","http://192.168.40.39:8000","http://192.168.83.160:3000","http://192.168.83.175:8000","http://192.168.40.39:3000","http://192.168.40.14:3000"]
+CORS_ORIGIN_WHITELIST = ["http://localhost:8000", "http://localhost:3000","http://192.168.40.39:8000","http://192.168.83.160:3000","http://192.168.83.175:8000","http://192.168.40.39:3000","http://192.168.40.14:3000"]
 PHONENUMBER_DEFAULT_REGION = 'IR'
 PHONENUMBER_DB_FORMAT = 'INTERNATIONAL'
 # Application definitionINTERNATIONAL'

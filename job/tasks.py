@@ -21,11 +21,33 @@ def run_workflow_task(self, job_id, modified_workflow):
     start_time = now()  # Capture the start time
     job.save()
 
+    workflow_outputs = job.workflow.outputs  # Get the workflow outputs
+
     try:
-        # Run the workflow and get images in byte form
+        # Run the workflow and get images in byte form and texts
         client_id = str(self.request.id)  # Unique client ID from Celery task
-        images,texts = run_workflow(modified_workflow, job_id, client_id)
+        images, texts = run_workflow(modified_workflow, job_id, client_id)
         job = Job.objects.get(id=job_id)
+        print(texts)
+
+        # Filter images based on workflow output node IDs
+        filtered_images = {
+            node_id: img_list for node_id, img_list in images.items() if node_id in workflow_outputs and 'images' in workflow_outputs[node_id]
+        }
+
+        # Extract relevant text prompts by checking output node types
+        negative_prompt = None
+        complex_prompt = None
+        tag_prompt = None
+        
+        for node_id, output_type in workflow_outputs.items():
+            if 'text' in output_type:
+                if output_type['text'] == 'text_prompt_negative':
+                    negative_prompt = texts.get(node_id, '')
+                elif output_type['text'] == 'text_prompt_complex':
+                    complex_prompt = texts.get(node_id, '')
+                elif output_type['text'] == 'text_prompt_tag':
+                    tag_prompt = texts.get(node_id, '')
 
         # If the job has no associated datasets, create a temporary dataset for the user
         if not job.dataset:
@@ -34,7 +56,7 @@ def run_workflow_task(self, job_id, modified_workflow):
                 created_by=user,
                 temporary=True,  # Mark this dataset as temporary
             )
-            job.dataset=temp_dataset  # Add the dataset to the job
+            job.dataset = temp_dataset  # Add the dataset to the job
             job.save()
 
         # Create a directory for the user's images
@@ -43,7 +65,7 @@ def run_workflow_task(self, job_id, modified_workflow):
 
         # Save the images and store their URLs
         image_urls = []
-        for node_id, image_list in images.items():
+        for node_id, image_list in filtered_images.items():
             for idx, image_data in enumerate(image_list):
                 # Convert image bytes to Image object
                 image = Image.open(io.BytesIO(image_data))
@@ -66,11 +88,14 @@ def run_workflow_task(self, job_id, modified_workflow):
                     name=f"Generated Image {idx}",
                     image=file_path,
                     created_by=user,
+                    negative_prompt=negative_prompt,
+                    complex_prompt=complex_prompt,
+                    tag_prompt=tag_prompt,
+                    
                 )
 
-        # Save the result URLs to the job
-        job.result_data = {"image_urls": image_urls,'texts':texts}
-        
+        # Save the result URLs and texts to the job
+        job.result_data = {"image_urls": image_urls, "texts": texts}
         job.status = "completed"
 
     except Exception as e:

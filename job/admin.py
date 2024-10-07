@@ -8,7 +8,7 @@ from job.models.WorkflowRunner import WorkflowRunner
 # Register Workflow and WorkflowRunner
 admin.site.register(Workflow)
 admin.site.register(WorkflowRunner)
-
+admin.site.register(DatasetImage)
 
 # Inline to show the dataset images related to a dataset
 class DatasetImageInline(admin.StackedInline):
@@ -95,3 +95,4 @@ class CharacterAdmin(admin.ModelAdmin):
         return "No Image"
 
     image_preview.short_description = "Image Preview"
+    

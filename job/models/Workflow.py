@@ -5,7 +5,8 @@ class Workflow(models.Model):
     name = models.CharField(max_length=500)
     json_data = models.JSONField()  # Stores the workflow JSON data as a JSONField
     last_modified = models.DateTimeField(auto_now=True)  # Automatically set on update
-    inputs = models.JSONField()  # Stores input mapping like {node_id: input_name}
+    inputs = models.JSONField() 
+    outputs = models.JSONField()  
     user = models.ForeignKey(User, on_delete=models.CASCADE)  # Link to the Django user
 
     def __str__(self):

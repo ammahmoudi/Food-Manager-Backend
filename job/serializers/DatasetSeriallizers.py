@@ -78,7 +78,7 @@ class DatasetCreateSerializer(serializers.ModelSerializer):
 
 
 class CharacterSerializer(serializers.ModelSerializer):
-    datasets = DatasetSerializer(many=True, required=False)
+    datasets = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     class Meta:
         model = Character
