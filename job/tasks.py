@@ -1,5 +1,6 @@
 import io
 import os
+import json
 from PIL import Image
 from django.conf import settings
 from django.utils.timezone import now
@@ -22,32 +23,45 @@ def run_workflow_task(self, job_id, modified_workflow):
     job.save()
 
     workflow_outputs = job.workflow.outputs  # Get the workflow outputs
+    additional_logs = {
+        "extra_images": [],
+        "extra_texts": []
+    }
 
     try:
         # Run the workflow and get images in byte form and texts
         client_id = str(self.request.id)  # Unique client ID from Celery task
         images, texts = run_workflow(modified_workflow, job_id, client_id)
         job = Job.objects.get(id=job_id)
-        print(texts)
 
-        # Filter images based on workflow output node IDs
-        filtered_images = {
-            node_id: img_list for node_id, img_list in images.items() if node_id in workflow_outputs and 'images' in workflow_outputs[node_id]
-        }
+        # Initialize the result data
+        result_data = {}
 
-        # Extract relevant text prompts by checking output node types
+        # Find relevant prompt texts across all nodes, not just image nodes
         negative_prompt = None
         complex_prompt = None
         tag_prompt = None
-        
-        for node_id, output_type in workflow_outputs.items():
-            if 'text' in output_type:
-                if output_type['text'] == 'text_prompt_negative':
-                    negative_prompt = texts.get(node_id, '')
-                elif output_type['text'] == 'text_prompt_complex':
-                    complex_prompt = texts.get(node_id, '')
-                elif output_type['text'] == 'text_prompt_tag':
-                    tag_prompt = texts.get(node_id, '')
+
+        # Iterate through the workflow outputs to find the nodes that contain text prompts
+        for node_id, output_info in workflow_outputs.items():
+            if 'text' in output_info:
+                text_type = output_info['text']
+                text_value = texts.get(node_id, [''])[0]
+
+                if text_type == 'text_prompt_negative':
+                    negative_prompt = text_value
+                elif text_type == 'text_prompt_complex':
+                    complex_prompt = text_value
+                elif text_type == 'text_prompt_tag':
+                    tag_prompt = text_value
+
+                # Save the text output in result_data
+                result_data[node_id] = {
+                    "input_name": {
+                        "type": text_type,
+                        "value": text_value
+                    }
+                }
 
         # If the job has no associated datasets, create a temporary dataset for the user
         if not job.dataset:
@@ -63,9 +77,8 @@ def run_workflow_task(self, job_id, modified_workflow):
         user_dir = os.path.join(settings.MEDIA_ROOT, f"user_{user.id}")
         os.makedirs(user_dir, exist_ok=True)
 
-        # Save the images and store their URLs
-        image_urls = []
-        for node_id, image_list in filtered_images.items():
+        # Process images and associate them with workflow outputs
+        for node_id, image_list in images.items():
             for idx, image_data in enumerate(image_list):
                 # Convert image bytes to Image object
                 image = Image.open(io.BytesIO(image_data))
@@ -77,26 +90,56 @@ def run_workflow_task(self, job_id, modified_workflow):
                 # Save image to the media directory
                 image.save(file_path)
 
-                # Store the relative URL
+                # Store the relative URL and create the full URL
                 relative_url = os.path.relpath(file_path, settings.MEDIA_ROOT)
                 full_url = os.path.join(settings.MEDIA_URL, relative_url)
-                image_urls.append(full_url)
 
-                # Create a DatasetImage for each result image, associate with the job's dataset
-                DatasetImage.objects.create(
-                    job=job,
-                    name=f"Generated Image {idx}",
-                    image=file_path,
-                    created_by=user,
-                    negative_prompt=negative_prompt,
-                    complex_prompt=complex_prompt,
-                    tag_prompt=tag_prompt,
-                    
-                )
+                # Check if this node_id is part of the workflow outputs for images
+                if node_id in workflow_outputs and 'images' in workflow_outputs[node_id]:
+                    if node_id not in result_data:
+                        result_data[node_id] = {}
 
-        # Save the result URLs and texts to the job
-        job.result_data = {"image_urls": image_urls, "texts": texts}
+                    # Use the workflow-determined input name for the image output
+                    input_name = workflow_outputs[node_id]['images']
+                     # Create DatasetImage for each image and associate text prompts
+                    dataset_image=DatasetImage.objects.create(
+                        job=job,
+                        name=f"Generated Image {idx}",
+                        image=file_path,
+                        created_by=user,
+                        negative_prompt=negative_prompt,  # Use the found prompts
+                        complex_prompt=complex_prompt,
+                        tag_prompt=tag_prompt,
+                    )
+                    result_data[node_id][input_name] = {
+                        "id": f"{dataset_image.id}",  # Add the ID for the output image
+                        "type": "image",
+                        "value": full_url  # Store the full URL of the image
+                    }
+
+                   
+
+                else:
+                    # Save the image URL to logs for non-workflow outputs
+                    additional_logs['extra_images'].append({
+                        "node_id": node_id,
+                        "image_url": full_url
+                    })
+
+        # Handle extra texts not in workflow outputs
+        for node_id, text_value in texts.items():
+            if node_id not in workflow_outputs:
+                additional_logs['extra_texts'].append({
+                    "node_id": node_id,
+                    "text": text_value
+                })
+
+        # Save the structured result data to the job
+        job.result_data = result_data
         job.status = "completed"
+
+        # Append the additional logs (extra texts and images)
+        job.logs = (job.logs or "") + "\n" + json.dumps(additional_logs)
 
     except Exception as e:
         job = Job.objects.get(id=job_id)
@@ -106,12 +149,16 @@ def run_workflow_task(self, job_id, modified_workflow):
         job.logs = (job.logs or "") + "Error in saving task results: \n " + str(e) + "\n "
 
     finally:
-        # Track the job duration
+        # Track the job duration and append to logs in proper JSON format
         end_time = now()
         job.runtime = end_time - start_time  # Store the duration in 'runtime' field
-        job.logs = (
-            job.logs or ""
-        ) + f"\nDuration: {job.runtime}\n"  # Append duration to logs
+
+        # Append duration to logs in JSON format
+        duration_log = json.dumps({
+            "duration": str(job.runtime)
+        })
+        job.logs = (job.logs or "") + "\n" + duration_log
+
         job.save()  # Save job status, result, and logs
 
     return job_id

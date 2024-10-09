@@ -5,10 +5,10 @@ from job.models.Job import Job
 from job.models.Workflow import Workflow
 from job.models.WorkflowRunner import WorkflowRunner
 
+
 # Register Workflow and WorkflowRunner
-admin.site.register(Workflow)
 admin.site.register(WorkflowRunner)
-admin.site.register(DatasetImage)
+
 
 # Inline to show the dataset images related to a dataset
 class DatasetImageInline(admin.StackedInline):
@@ -65,19 +65,48 @@ class DatasetAdmin(admin.ModelAdmin):
         return qs.select_related("character", "created_by")
 
 
-# Admin for Job to include dataset-related information
-@admin.register(Job)
-class JobAdmin(admin.ModelAdmin):
-    list_display = ['id', 'workflow', 'status', 'user', 'runtime', 'dataset']
-    search_fields = ['workflow__name', 'user__username']
-    list_filter = ['status', 'dataset']
+# Admin for DatasetImage to show image details in list view
+@admin.register(DatasetImage)
+class DatasetImageAdmin(admin.ModelAdmin):
+    list_display = ["name", "image_preview", "complex_prompt", "tag_prompt", "negative_prompt", "created_by", "created_at"]
+    search_fields = ["name", "created_by__username", "complex_prompt", "tag_prompt", "negative_prompt"]
+    readonly_fields = ["image_preview"]
 
-    def dataset(self, obj):
-        """Show the dataset associated with the job."""
-        return obj.datasets.first().name if obj.datasets.exists() else "No Dataset"
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                f'<img src="{obj.image.url}" style="width: 100px; height: auto;" />'
+            )
+        return "No Image"
 
-    dataset.short_description = "Dataset"
+    image_preview.short_description = "Image Preview"
 
+
+# Admin for Workflow to show relevant data in list view
+@admin.register(Workflow)
+class WorkflowAdmin(admin.ModelAdmin):
+    list_display = ["name", "user", "last_modified", "input_count", "output_count"]
+    search_fields = ["name", "user__username"]
+    list_filter = ["last_modified"]
+
+    def input_count(self, obj):
+        """Display the number of inputs."""
+        return len(obj.inputs)
+
+    input_count.short_description = "Number of Inputs"
+
+    def output_count(self, obj):
+        """Display the number of outputs."""
+        return len(obj.outputs)
+
+    output_count.short_description = "Number of Outputs"
+
+    def get_queryset(self, request):
+        """
+        Customize queryset to optimize for admin performance.
+        """
+        qs = super().get_queryset(request)
+        return qs.select_related("user")
 
 # Admin for Character model
 @admin.register(Character)
@@ -95,4 +124,14 @@ class CharacterAdmin(admin.ModelAdmin):
         return "No Image"
 
     image_preview.short_description = "Image Preview"
-    
+@admin.register(Job)
+class JobAdmin(admin.ModelAdmin):
+    list_display = ['id', 'workflow', 'status', 'user', 'runtime', 'dataset']
+    search_fields = ['workflow__name', 'user__username']
+    list_filter = ['status', 'dataset']
+
+    def dataset(self, obj):
+        """Show the dataset associated with the job."""
+        return obj.datasets.first().name if obj.datasets.exists() else "No Dataset"
+
+    dataset.short_description = "Dataset"

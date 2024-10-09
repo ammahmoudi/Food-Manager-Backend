@@ -36,6 +36,19 @@ PHONENUMBER_DEFAULT_REGION = 'IR'
 PHONENUMBER_DB_FORMAT = 'INTERNATIONAL'
 # Application definitionINTERNATIONAL'
 # Application definition
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+}
 
 INSTALLED_APPS = [
     "django_jalali",

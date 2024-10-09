@@ -1,3 +1,4 @@
+import json
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -5,12 +6,15 @@ from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
     OpenApiExample,
+    OpenApiResponse,
+    inline_serializer,
 )
 from job.models.Dataset import Character, Dataset, DatasetImage
 from job.models.Job import Job
 from job.models.WorkflowRunner import WorkflowRunner
 from job.serializers.WorkflowRunnerSerializers import WorkflowRunnerSerializer
 from job.views.WorkflowViewSet import WorkflowViewSet
+from rest_framework import serializers
 
 
 @extend_schema_view(
@@ -63,20 +67,32 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
     serializer_class = WorkflowRunnerSerializer
 
     @extend_schema(
-        operation_id="generate_character_image",
-        summary="Generate a character image from a prompt",
-        description="This endpoint takes a text prompt and uses the specialized workflow to generate a character image.",
+        operation_id="generate_character_initial_image",
+        summary="Generate character initial image from a prompt",
+        description="This endpoint takes a text prompt and uses the specialized workflow to generate a character initial image.",
         request=WorkflowRunnerSerializer,
         responses={
-            200: OpenApiExample(
-                "Success",
-                value={"job_id": 123, "status": "started"},
-                response_only=True,
+            status.HTTP_200_OK: OpenApiResponse(
+                response=WorkflowRunnerSerializer,
+                examples=[
+                    OpenApiExample(
+                        "Success",
+                        value={"job_id": 1243},
+                        status_codes=[200],
+                        response_only=True,
+                    ),
+                ],
             ),
-            404: OpenApiExample(
-                "Not Found",
-                value={"error": "Specialized workflow runner not found."},
-                response_only=True,
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                response=None,
+                description="Specialized workflow runner not found.",
+                examples=[
+                    OpenApiExample(
+                        "Not Found",
+                        value={"error": "Specialized workflow runner not found."},
+                        status_codes=[404],
+                    ),
+                ],
             ),
         },
         examples=[
@@ -84,17 +100,13 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
                 "Example",
                 value={"prompt": "A warrior with a sword standing on a mountain"},
                 request_only=True,
-            )
+            ),
         ],
-        tags=[
-            "Workflow Runners"
-        ],  # Add this tag to categorize under 'Specialized Workflows'
+        tags=["Workflow Runners"],
     )
     @action(detail=False, methods=["post"], url_path="characters/prompt")
     def generate_character_initial_image(self, request):
-        specialized_runner = self.get_runner(
-            "generate_character_initial_image_with_prompt"
-        )
+        specialized_runner = self.get_runner("generate_character_initial_image")
         if not specialized_runner:
             return Response(
                 {"error": "Specialized workflow runner not found."},
@@ -136,60 +148,88 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
         # Use the same workflow running logic
         return WorkflowViewSet()._run_workflow_logic(request, workflow)
 
+        # Define the response schema using inline_serializer for simplicity
+
     @extend_schema(
-        operation_id="run_generate_character_sample",
-        summary="Run jobs to generate character images and associate them with a dataset",
-        description=(
-            "This endpoint takes a user-provided image (specified by dataset_image_id) and compares it with reference images to generate character images. "
-            "It generates character images using a specialized workflow and returns the dataset ID where all generated images are stored, along with job IDs."
+    operation_id="run_generate_character_sample",
+    summary="Run jobs to generate character images and associate them with a dataset",
+    description=(
+        "This endpoint takes a user-provided image (specified by dataset_image_id) and compares it with reference images to generate character images. "
+        "It generates character images using a specialized workflow and returns the dataset ID where all generated images are stored, along with job IDs."
+    ),
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "dataset_image_id": {
+                    "type": "integer",
+                    "description": "ID of the user-provided dataset image used as a reference for generating character images.",
+                },
+            },
+            "required": ["dataset_image_id"],
+            "example": {
+                "dataset_image_id": 123,
+            },
+        }
+    },
+    responses={
+        status.HTTP_200_OK: OpenApiResponse(
+            response=WorkflowRunnerSerializer,
+            examples=[
+                OpenApiExample(
+                    "Success",
+                    value={"dataset_id": 2, "job_ids": [1, 2, 3]},
+                    status_codes=[200],
+                    response_only=True,
+                ),
+            ],
         ),
-        request={
-            "application/json": {
+        status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+            response={
                 "type": "object",
                 "properties": {
-                    "dataset_image_id": {
-                        "type": "integer",
-                        "description": "ID of the user-provided dataset image used as a reference for generating character images.",
-                    },
+                    "error": {"type": "string"}
                 },
-                "required": ["dataset_image_id"],
-                "example": {
-                    "dataset_image_id": 123,
+                "example": {"error": "Dataset image ID is required."}
+            },
+            description="Bad request due to missing or invalid parameters.",
+            examples=[
+                OpenApiExample(
+                    "Bad Request",
+                    value={"error": "Dataset image ID is required."},
+                    status_codes=[400],
+                    response_only=True,
+                ),
+            ],
+        ),
+        status.HTTP_404_NOT_FOUND: OpenApiResponse(
+            response={
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"}
                 },
-            }
-        },
-        responses={
-            200: OpenApiExample(
-                "Success",
-                value={
-                    "dataset_id": 567,
-                    "job_ids": [234, 235, 236],
-                    "status": "started",
-                },
-                response_only=True,
-            ),
-            400: OpenApiExample(
-                "Bad Request",
-                value={"error": "Dataset image ID is required."},
-                response_only=True,
-            ),
-            404: OpenApiExample(
-                "Not Found",
-                value={"error": "Specialized workflow runner not found."},
-                response_only=True,
-            ),
-        },
-        examples=[
-            OpenApiExample(
-                "Example Request",
-                value={"dataset_image_id": 123},
-                request_only=True,
-            )
-        ],
-        tags=[
-            "Workflow Runners"
-        ],  # Add this tag to categorize under 'Workflow Runners'
-    )
+                "example": {"error": "Specialized workflow runner not found."}
+            },
+            description="Specialized workflow runner not found.",
+            examples=[
+                OpenApiExample(
+                    "Not Found",
+                    value={"error": "Specialized workflow runner not found."},
+                    status_codes=[404],
+                    response_only=True,
+                ),
+            ],
+        ),
+    },
+    examples=[
+        OpenApiExample(
+            "Example Request",
+            value={"dataset_image_id": 123},
+            request_only=True,
+        ),
+    ],
+    tags=["Workflow Runners"],
+)
     @action(
         detail=False, methods=["post"], url_path="characters/generate-character-samples"
     )
@@ -221,7 +261,6 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
         # Get images from jobs of the reference dataset
         reference_images = []
         for image in reference_dataset.get_images().all():
-
             reference_images.append(image)
 
         if not reference_images:
@@ -272,7 +311,6 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-
     @extend_schema(
     operation_id="generate_character_image",
     summary="Generate a character image using the simple_flux_lora workflow",
@@ -303,27 +341,66 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
                 "prompt": "A warrior standing in the rain",
                 "character_id": 1,
                 "lora_name": "elahe_final",
+                "seed": "1234",
+                "lora_strength": "0.5",
+                "aspect_ratio": "1:1",
             },
         }
     },
     responses={
-        200: OpenApiExample(
-            "Success",
-            value={
-                "dataset_id": 567,
-                "job_id": 123,
+        status.HTTP_200_OK: OpenApiResponse(
+            response=None,  # No specific serializer
+            examples=[
+                OpenApiExample(
+                    "Success",
+                    value={
+                        "dataset_id": 567,
+                        "job_id": 123,
+                    },
+                    response_only=True,
+                    status_codes=[200],
+                )
+            ],
+        ),
+        status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+            response={
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"}
+                },
+                "example": {"error": "Prompt, character_id, and lora_name are required."}
             },
-            response_only=True,
+            description="Bad request due to missing or invalid parameters.",
+            examples=[
+                OpenApiExample(
+                    "Bad Request",
+                    value={
+                        "error": "Prompt, character_id, and lora_name are required."
+                    },
+                    response_only=True,
+                    status_codes=[400],
+                )
+            ]
         ),
-        400: OpenApiExample(
-            "Bad Request",
-            value={"error": "Prompt, character_id, and lora_name are required."},
-            response_only=True,
-        ),
-        404: OpenApiExample(
-            "Not Found",
-            value={"error": "Specialized workflow runner not found."},
-            response_only=True,
+        status.HTTP_404_NOT_FOUND: OpenApiResponse(
+            response={
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"}
+                },
+                "example": {"error": "Specialized workflow runner not found."}
+            },
+            description="Specialized workflow runner not found.",
+            examples=[
+                OpenApiExample(
+                    "Not Found",
+                    value={
+                        "error": "Specialized workflow runner not found."
+                    },
+                    response_only=True,
+                    status_codes=[404],
+                )
+            ]
         ),
     },
     examples=[
@@ -333,13 +410,20 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
                 "prompt": "A warrior standing in the rain",
                 "character_id": 1,
                 "lora_name": "elahe_final",
+                "seed": "1234",
+                "lora_strength": "0.5",
+                "aspect_ratio": "1:1",
             },
             request_only=True,
-        )
+        ),
     ],
-    tags=["Workflow Runners"],  # Add this tag to categorize under 'Workflow Runners'
+    tags=[
+        "Workflow Runners"
+    ]
 )
-    @action(detail=False, methods=["post"], url_path="characters/generate-character-image")
+    @action(
+        detail=False, methods=["post"], url_path="characters/generate-character-image"
+    )
     def generate_character_image(self, request):
         # Get the specialized runner for the workflow
         specialized_runner = self.get_runner("generate_character_image")
@@ -353,6 +437,7 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
         prompt = request.data.get("prompt")
         character_id = request.data.get("character_id")
         lora_name = request.data.get("lora_name")
+        print(request.data)
 
         if not prompt or not character_id or not lora_name:
             return Response(
@@ -378,23 +463,27 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
             )
 
         # Create a new dataset for this set of jobs
-        dataset,is_new = Dataset.objects.get_or_create(
+        dataset, is_new = Dataset.objects.get_or_create(
             name=f"Generated Character Dataset - {character_id} - {lora_name} - {request.user.full_name}",
             created_by=request.user,
             character=character,
-            dataset_type="job"  # Assume this is a job-based dataset
+            dataset_type="job",  # Assume this is a job-based dataset
         )
 
-        # Prepare the input format required for the workflow
-        input_data = {
-            "prompt": prompt,
-            "lora_value": lora_value,  # Include the lora_value in the inputs
-        }
+        # Create a mutable copy of request.data
+        input_data = request.data.copy()
 
-        # Pass the inputs to the workflow
-        request.data["inputs"] = input_data
+        # Remove lora_name and character_id
+        input_data.pop("lora_name", None)
+        input_data.pop("character_id", None)
 
-        # Use the same workflow running logic
+        # Add lora_value to input_data
+        input_data["lora_value"] = lora_value
+
+        # Update request.data with the modified inputs
+        request._full_data = json.loads(json.dumps(input_data))
+
+        # Pass the updated inputs to the workflow
         response = self.prepare_and_run_workflow(request, specialized_runner)
 
         if response.status_code == status.HTTP_201_CREATED:
@@ -407,10 +496,13 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
             job.dataset = dataset
             job.save()
 
-            return Response({
-                "dataset_id": dataset.id,
-                "job_id": job_id,
-            }, status=status.HTTP_201_CREATED)
+            return Response(
+                {
+                    "dataset_id": dataset.id,
+                    "job_id": job_id,
+                },
+                status=status.HTTP_201_CREATED,
+            )
 
         return Response(
             {"error": "Failed to start the workflow."},

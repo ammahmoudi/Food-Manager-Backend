@@ -1,39 +1,56 @@
+import json
 from rest_framework import serializers
-from django.conf import settings
 from urllib.parse import urljoin
-from rest_framework import serializers
 
 from job.models.Job import Job
 
 class JobSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
-        fields = ['id', 'workflow', 'status', 'runtime', 'images' ,'result_data', 'input_data', 'logs', 'user','dataset']
+        fields = ['id', 'workflow', 'status', 'runtime', 'images', 'result_data', 'input_data', 'logs', 'user', 'dataset']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
 
-        # Convert relative URLs to full URLs in result_data
+        # Get the request object from context
         request = self.context.get('request')
 
         # Ensure result_data exists and is not None
         result_data = representation.get('result_data', None)
-        if result_data and 'image_urls' in result_data:
-            image_urls = result_data['image_urls']
-            full_image_urls = []
+        if result_data:
+            # Traverse through result_data and update image URLs
+            for node_id, outputs in result_data.items():
+                for input_name, output in outputs.items():
+                    if output.get('type') == 'image':
+                        # Convert relative URL to full URL
+                        image_url = output.get('value', '')
+                        if image_url and request:
+                            if not image_url.startswith('http'):
+                                full_url = urljoin(request.build_absolute_uri('/'), image_url.lstrip('/'))
+                                representation['result_data'][node_id][input_name]['value'] = full_url
 
-            for url in image_urls:
-                # Check if it's a relative URL and convert it to a full URL
-                if not url.startswith('http'):
-                    full_url = urljoin(request.build_absolute_uri('/'), url.lstrip('/'))
-                    full_image_urls.append(full_url)
-                else:
-                    full_image_urls.append(url)
+        # Handle extra_images in logs
+        logs = representation.get('logs', None)
+        if logs and request:
+            try:
+                # Attempt to parse logs as JSON
+                logs_data = json.loads(logs)
+                extra_images = logs_data.get('extra_images', [])
+                
+                for image_entry in extra_images:
+                    image_url = image_entry.get('image_url', '')
+                    if image_url and not image_url.startswith('http'):
+                        full_url = urljoin(request.build_absolute_uri('/'), image_url.lstrip('/'))
+                        image_entry['image_url'] = full_url
 
-            # Update the result_data with full URLs
-            representation['result_data']['image_urls'] = full_image_urls
+                # Re-serialize logs back to string after updating image URLs
+                representation['logs'] = json.dumps(logs_data)
+            except json.JSONDecodeError:
+                # In case logs are not in valid JSON format, keep them as is
+                pass
 
         return representation
+
 class JobCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job

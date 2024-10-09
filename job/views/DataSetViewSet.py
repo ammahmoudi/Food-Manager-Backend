@@ -1,3 +1,4 @@
+from datetime import timezone
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -180,9 +181,13 @@ class DatasetViewSet(viewsets.ModelViewSet):
         summary="Add images to a temporary image-type dataset",
         description="Add images to the user's temporary dataset of image type.",
         tags=["Datasets"],
-        request=AddImageToDatasetSerializer(many=True),
+        request={
+            'multipart/form-data': {
+                'image': 'file'
+            }
+        },
         responses={
-            200: "Images successfully added.",
+            200: AddImageToDatasetSerializer(many=True),
             400: "Invalid data.",
         },
     )
@@ -192,28 +197,30 @@ class DatasetViewSet(viewsets.ModelViewSet):
         user = request.user
         # Fetch or create the user's temporary image-type dataset
         temp_dataset, created = Dataset.objects.get_or_create(
-              name=f"Temp Image Dataset for {user.full_name}",
+            name=f"Temp Image Dataset for {user.full_name}",
             created_by=user, temporary=True, dataset_type="image"
         )
 
-        serializer = AddImageToDatasetSerializer(data=request.data, many=True)
-        if serializer.is_valid():
-            images_added = []
-            for image_data in serializer.validated_data:
-                dataset_image = DatasetImage.objects.create(
-                    dataset=temp_dataset, created_by=user, **image_data
-                )
-                images_added.append(dataset_image)
+        # Check if the image is provided in the request
+        if 'image' not in request.FILES:
+            return Response({"error": "No image provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response(
-                {
-                    "status": "images added",
-                    "image_ids": [img.id for img in images_added],
-                },
-                status=status.HTTP_200_OK,
-            )
+        # Automatically generate a name for the image using user and timestamp
+        image_name = f"{user.full_name}_{timezone.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        dataset_image = DatasetImage.objects.create(
+            dataset=temp_dataset,
+            created_by=user,
+            name=image_name,
+            image=request.FILES['image']
+        )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Return the created image object
+        return Response(
+            DatasetImageSerializer(dataset_image, context={"request": request}).data,
+            status=status.HTTP_200_OK
+        )
+
 
     @extend_schema(
         summary="Add jobs to a temporary job-type dataset",

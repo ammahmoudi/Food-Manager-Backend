@@ -7,11 +7,20 @@ from drf_spectacular.utils import extend_schema_view, extend_schema
 from job.models.Job import Job
 from job.models.Workflow import Workflow
 from job.serializers.JobSerializers import JobSerializer
-from job.serializers.WorkflowSerializer import RunWorkflowSerializer, WorkflowCreateSerializer, WorkflowJSONSerializer, WorkflowSerializer
+from job.serializers.WorkflowSerializer import (
+    RunWorkflowSerializer,
+    WorkflowCreateSerializer,
+    WorkflowJSONSerializer,
+    WorkflowSerializer,
+)
 from job.tasks import run_workflow_task
 from utils.cui import replace_user_inputs
 import os
 import base64
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Workflow viewset with API schema extensions for categorization
@@ -54,13 +63,16 @@ class WorkflowViewSet(viewsets.ModelViewSet):
 
         if serializer.is_valid():
             user_inputs = serializer.validated_data.get("inputs", {})
-            processed_inputs = self._prepare_inputs(workflow, user_inputs, request)
 
-            if not self._validate_inputs(workflow.inputs, processed_inputs):
+            # Validate inputs before processing
+            if not self._validate_inputs(workflow.inputs, user_inputs):
                 return Response(
-                    {"error": "Invalid inputs provided."},
+                    {"error": "Invalid or missing inputs."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            processed_inputs = self._prepare_inputs(workflow, user_inputs, request)
+            print(processed_inputs)
 
             # Create job and run workflow
             job = Job.objects.create(
@@ -81,19 +93,33 @@ class WorkflowViewSet(viewsets.ModelViewSet):
 
     def _prepare_inputs(self, workflow, user_inputs, request):
         """Prepare inputs for the workflow, processing base64 images, URLs, static paths, or other data."""
+        print("user_inputs", user_inputs)
+        print("workflow.inputs", workflow.inputs)
+
         processed_inputs = {}
         for node_id, node_inputs in user_inputs.items():
             processed_inputs[node_id] = {}
             for input_name, input_data in node_inputs.items():
                 expected_type = workflow.inputs.get(node_id, {}).get(input_name, {})
 
+                # Skip inputs that are not provided or are empty
+                if "input_value" not in input_data or not input_data["input_value"]:
+                    continue
+
                 # Check if input is a base64 string (based on the pattern "data:image/*;base64,...")
-                if expected_type == "image_url" and self.is_base64_image(input_data.get("input_value", "")):
-                    image_url = self.save_base64_image(input_data["input_value"], request.user, workflow, request)
+                if expected_type == "image_url" and self.is_base64_image(
+                    input_data.get("input_value", "")
+                ):
+                    image_url = self.save_base64_image(
+                        input_data["input_value"], request.user, workflow, request
+                    )
                     processed_inputs[node_id][input_name] = image_url
 
                 # If input is already a URL or relative/static path
-                elif expected_type == "image_url" and (input_data.get("input_value", "").startswith("http") or input_data.get("input_value", "").startswith("/")):
+                elif expected_type == "image_url" and (
+                    input_data.get("input_value", "").startswith("http")
+                    or input_data.get("input_value", "").startswith("/")
+                ):
                     processed_inputs[node_id][input_name] = input_data["input_value"]
 
                 # If expected type is base64, use the base64 image directly
@@ -101,8 +127,30 @@ class WorkflowViewSet(viewsets.ModelViewSet):
                     processed_inputs[node_id][input_name] = input_data["input_value"]
 
                 # If expected type is string, use it as is
-                elif expected_type == "string":
+                elif expected_type.startswith("string"):
                     processed_inputs[node_id][input_name] = input_data["input_value"]
+
+                # If expected type is int, parse the input to int
+                elif expected_type == "int":
+                    try:
+                        processed_inputs[node_id][input_name] = int(
+                            input_data["input_value"]
+                        )
+                    except ValueError:
+                        # Handle the error if input_value can't be converted to int
+                        raise ValueError(
+                            f"Invalid int value for {input_name} in node {node_id}: {input_data['input_value']}"
+                        )
+                elif expected_type == "float":
+                    try:
+                        processed_inputs[node_id][input_name] = float(
+                            input_data["input_value"]
+                        )
+                    except ValueError:
+                        # Handle the error if input_value can't be converted to float
+                        raise ValueError(
+                            f"Invalid int value for {input_name} in node {node_id}: {input_data['input_value']}"
+                        )
 
         return processed_inputs
 
@@ -111,14 +159,26 @@ class WorkflowViewSet(viewsets.ModelViewSet):
         base64_pattern = re.compile(r"^data:image\/[a-zA-Z]+;base64,")
         return base64_pattern.match(input_value) is not None
 
-    def _validate_inputs(self, workflow_inputs, processed_inputs):
-        """Validate if all necessary inputs are provided and correctly formatted."""
+    def _validate_inputs(self, workflow_inputs, user_inputs):
+        """Validate if all necessary inputs are provided and not empty."""
         for node_id, node_inputs in workflow_inputs.items():
-            if node_id not in processed_inputs:
-                return False
-            for input_name in node_inputs:
-                if input_name not in processed_inputs[node_id]:
-                    return False
+            # Check if node_id exists in user inputs
+            if node_id not in user_inputs:
+                logger.warning(f"Node {node_id} is missing in user inputs.")
+                return True
+            for input_name, expected_type in node_inputs.items():
+                user_input = user_inputs[node_id].get(input_name)
+
+                # Ensure input exists and is not empty
+                if (
+                    not user_input
+                    or "input_value" not in user_input
+                    or not user_input["input_value"]
+                ):
+                    logger.warning(
+                        f"Input {input_name} in node {node_id} is not provided or empty."
+                    )
+                    return True
         return True
 
     def save_base64_image(self, image_base64, user, workflow, request):
@@ -156,16 +216,6 @@ class WorkflowViewSet(viewsets.ModelViewSet):
         image_data = image_file.read()
         base64_str = base64.b64encode(image_data).decode("utf-8")
         return base64_str
-
-    def validate_inputs(self, workflow_inputs, processed_inputs):
-        """Validate if all necessary inputs are provided and correctly formatted."""
-        for node_id, node_inputs in workflow_inputs.items():
-            if node_id not in processed_inputs:
-                return False
-            for input_name in node_inputs:
-                if input_name not in processed_inputs[node_id]:
-                    return False
-        return True
 
     @extend_schema(
         summary="Parse and extract nodes from user-provided workflow JSON",
