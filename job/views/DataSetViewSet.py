@@ -1,4 +1,5 @@
-from datetime import timezone
+
+from datetime import datetime
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -206,7 +207,7 @@ class DatasetViewSet(viewsets.ModelViewSet):
             return Response({"error": "No image provided."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Automatically generate a name for the image using user and timestamp
-        image_name = f"{user.full_name}_{timezone.now().strftime('%Y%m%d_%H%M%S')}"
+        image_name = f"{user.full_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         dataset_image = DatasetImage.objects.create(
             dataset=temp_dataset,

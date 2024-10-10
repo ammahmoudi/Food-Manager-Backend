@@ -57,7 +57,7 @@ def run_workflow_task(self, job_id, modified_workflow):
 
                 # Save the text output in result_data
                 result_data[node_id] = {
-                    "input_name": {
+                   text_type : {
                         "type": text_type,
                         "value": text_value
                     }
@@ -78,6 +78,7 @@ def run_workflow_task(self, job_id, modified_workflow):
         os.makedirs(user_dir, exist_ok=True)
 
         # Process images and associate them with workflow outputs
+        filtered_images = {}
         for node_id, image_list in images.items():
             for idx, image_data in enumerate(image_list):
                 # Convert image bytes to Image object
@@ -101,8 +102,8 @@ def run_workflow_task(self, job_id, modified_workflow):
 
                     # Use the workflow-determined input name for the image output
                     input_name = workflow_outputs[node_id]['images']
-                     # Create DatasetImage for each image and associate text prompts
-                    dataset_image=DatasetImage.objects.create(
+                    # Create DatasetImage for each image and associate text prompts
+                    dataset_image = DatasetImage.objects.create(
                         job=job,
                         name=f"Generated Image {idx}",
                         image=file_path,
@@ -117,7 +118,10 @@ def run_workflow_task(self, job_id, modified_workflow):
                         "value": full_url  # Store the full URL of the image
                     }
 
-                   
+                    # Add to filtered images
+                    if node_id not in filtered_images:
+                        filtered_images[node_id] = []
+                    filtered_images[node_id].append(image_data)
 
                 else:
                     # Save the image URL to logs for non-workflow outputs
@@ -133,6 +137,14 @@ def run_workflow_task(self, job_id, modified_workflow):
                     "node_id": node_id,
                     "text": text_value
                 })
+
+        # If there are no filtered images and the job has an associated dataset image, update the existing dataset image with prompts
+        if not filtered_images and job.images.exists():
+            existing_image = job.images.first()
+            existing_image.negative_prompt = negative_prompt
+            existing_image.complex_prompt = complex_prompt
+            existing_image.tag_prompt = tag_prompt
+            existing_image.save()
 
         # Save the structured result data to the job
         job.result_data = result_data

@@ -1,4 +1,6 @@
 import json
+import random
+import warnings
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -7,14 +9,12 @@ from drf_spectacular.utils import (
     extend_schema_view,
     OpenApiExample,
     OpenApiResponse,
-    inline_serializer,
 )
 from job.models.Dataset import Character, Dataset, DatasetImage
 from job.models.Job import Job
 from job.models.WorkflowRunner import WorkflowRunner
 from job.serializers.WorkflowRunnerSerializers import WorkflowRunnerSerializer
 from job.views.WorkflowViewSet import WorkflowViewSet
-from rest_framework import serializers
 
 
 @extend_schema_view(
@@ -506,5 +506,142 @@ class WorkflowRunnerViewSet(viewsets.ModelViewSet):
 
         return Response(
             {"error": "Failed to start the workflow."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    @extend_schema(
+        operation_id="get_prompt_for_dataset_image",
+        summary="Generate prompts for an existing dataset image",
+        description=(
+            "This endpoint generates prompts based on a user-provided dataset image. "
+            "The prompts are derived using a workflow that processes the dataset image."
+        ),
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "dataset_image_id": {
+                        "type": "integer",
+                        "description": "ID of the dataset image to be used as input.",
+                    },
+                },
+                "required": ["dataset_image_id"],
+                "example": {
+                    "dataset_image_id": 123,
+                },
+            }
+        },
+        responses={
+            status.HTTP_200_OK: OpenApiResponse(
+                response={"type": "object", "properties": {"job_id": {"type": "integer"}}},
+                examples=[
+                    OpenApiExample(
+                        "Success",
+                        value={"job_id": 1},
+                        status_codes=[200],
+                        response_only=True,
+                    ),
+                ],
+            ),
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {"type": "string"}
+                    },
+                    "example": {"error": "Dataset image ID is required."}
+                },
+                description="Bad request due to missing or invalid parameters.",
+                examples=[
+                    OpenApiExample(
+                        "Bad Request",
+                        value={"error": "Dataset image ID is required."},
+                        status_codes=[400],
+                        response_only=True,
+                    ),
+                ],
+            ),
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                response={
+                    "type": "object",
+                    "properties": {
+                        "error": {"type": "string"}
+                    },
+                    "example": {"error": "Dataset image not found."}
+                },
+                description="Dataset image not found.",
+                examples=[
+                    OpenApiExample(
+                        "Not Found",
+                        value={"error": "Dataset image not found."},
+                        status_codes=[404],
+                        response_only=True,
+                    ),
+                ],
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "Example Request",
+                value={"dataset_image_id": 123},
+                request_only=True,
+            ),
+        ],
+        tags=["Workflow Runners"],
+    )
+    @action(
+        detail=False, methods=["post"], url_path="prompts/get-prompt"
+    )
+    def create_job_and_run(self, request):
+        dataset_image_id = request.data.get("dataset_image_id")
+        if not dataset_image_id:
+            return Response(
+                {"error": "Dataset image ID is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user_image = DatasetImage.objects.get(id=dataset_image_id)
+        except DatasetImage.DoesNotExist:
+            return Response(
+                {"error": "Dataset image not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Prepare and run the workflow using shared logic
+        workflow_runner = self.get_runner("generate_prompt")
+        if not workflow_runner:
+            return Response(
+                {"error": "Workflow runner not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Assign the image URL as an input to the job
+        mapped_inputs = {
+            "input_image": user_image.get_full_image_url(request),
+        }
+         # Add a random seed if not provided
+        if "seed" not in request.data:
+            random_seed = random.randint(0, 2**16)
+            mapped_inputs["seed"] = str(random_seed)
+            warnings.warn(f"Seed not provided. Using random seed: {random_seed}")
+        request.data["inputs"] = mapped_inputs
+
+        # Run the workflow and handle the response
+        response = self.prepare_and_run_workflow(request, workflow_runner)
+        if response.status_code == status.HTTP_201_CREATED:
+            job_id = response.data.get("job_id")
+
+            # Fetch the job object and associate it with the dataset image
+            job = Job.objects.get(id=job_id)
+            user_image.job = job
+            user_image.save()
+
+            job.status = "RUNNING"
+            job.save()
+
+            return Response({"job_id": job_id}, status=status.HTTP_200_OK)
+
+        return Response(
+            {"error": "Failed to create and run the job."},
             status=status.HTTP_400_BAD_REQUEST,
         )
